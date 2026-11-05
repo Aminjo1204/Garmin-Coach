@@ -76,11 +76,16 @@ async function load() {
   render();
   updateSyncLabel();
   loadWeather();
+  if (S.static) return; // Online-Version: Daten kommen vom PC (Coach-Check)
   const last = S.sync && S.sync.last_sync ? new Date(S.sync.last_sync) : null;
   if (!last || Date.now() - last.getTime() > 30 * 60 * 1000) doSync(true);
 }
 
 async function doSync(auto = false) {
+  if (S && S.static) {
+    toast("Online-Version: Neue Daten und Coach-Feedback kommen automatisch vom PC (2× täglich).");
+    return;
+  }
   const btn = $("#syncBtn");
   if (btn.classList.contains("busy")) return;
   btn.classList.add("busy");
@@ -103,6 +108,11 @@ async function doSync(auto = false) {
 }
 
 function updateSyncLabel() {
+  if (S && S.static) {
+    const d = new Date(S.exported || S.generated);
+    $("#syncLabel").textContent = `Stand ${d.toLocaleDateString("de-AT", { day: "numeric", month: "numeric" })} ${d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}`;
+    return;
+  }
   const t = S && S.sync && S.sync.last_sync;
   $("#syncLabel").textContent = t ? `Sync ${new Date(t).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}` : "Sync";
 }

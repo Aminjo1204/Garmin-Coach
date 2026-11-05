@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
       "runtimeArgs": ["app.py"],
       "port": 5057
+    },
+    {
+      "name": "online-preview",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "coach.netlify", "preview"],
+      "port": 5058
     }
   ]
 }

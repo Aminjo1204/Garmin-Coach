@@ -1,0 +1,23 @@
+# Online-Version (siehe docs/netlify.md). Wird mit `python -m coach.netlify deploy` vom PC aus hochgeladen.
+[build]
+  publish = "dist"
+  functions = "netlify/functions"
+  edge_functions = "netlify/edge-functions"
+
+# Die statischen Daten heißen anders als die lokalen API-Pfade
+[[redirects]]
+  from = "/api/state"
+  to = "/data/state.json"
+  status = 200
+
+[[redirects]]
+  from = "/api/activity/:id"
+  to = "/data/activity/:id.json"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "same-origin"

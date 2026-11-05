@@ -4,6 +4,10 @@ data/
 feedback/
 plan/
 userdata/
+dist/
+netlify.local.json
+.netlify/
+node_modules/
 
 # Python
 .venv/

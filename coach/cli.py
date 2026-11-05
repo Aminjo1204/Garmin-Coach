@@ -81,7 +81,13 @@ def status() -> dict:
 def main(argv: list[str]) -> None:
     cmd = argv[1] if len(argv) > 1 else "status"
     if cmd == "sync":
+        from .netlify import pull
         from .sync import sync
+        try:
+            if pull():
+                print("Eingaben aus der Online-Version abgeglichen.")
+        except Exception as exc:
+            print(f"Hinweis: Online-Eingaben nicht abrufbar ({exc}).")
         info = sync()
         print(json.dumps(info, ensure_ascii=False))
     elif cmd == "week":

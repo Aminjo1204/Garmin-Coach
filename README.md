@@ -106,6 +106,12 @@ Danach öffnet sich http://127.0.0.1:5057. Die App synchronisiert beim Öffnen a
 - **Automatisch:** eine geplante Aufgabe in der Claude-Desktop-App anlegen. Die Vorlage steht in
   [`docs/coach-check-prompt.md`](docs/coach-check-prompt.md).
 
+## Online aufs Handy (Netlify)
+
+Die App lässt sich passwortgeschützt auf Netlify veröffentlichen. Der PC rechnet weiter alles und lädt nach jedem
+Coach-Check eine aktuelle Version hoch. Deine Eingaben am Handy kommen beim nächsten Check zurück auf den PC.
+Die Anleitung steht in [`docs/netlify.md`](docs/netlify.md).
+
 ## Anpassen
 
 - **Plan:** `coach/plan_builder.py`. Die Wochen stehen in `WEEKS` (Fokus, Mo, Mi, Do, Fr, So). Die Bausteine darüber

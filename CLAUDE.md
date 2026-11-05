@@ -79,7 +79,9 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
 5. Montags (oder beim ersten Check einer neuen Planwoche) eine Wochen-Nachricht oben in `feedback/notes.json`
    einfügen. Die Liste ist neueste zuerst, höchstens 10 behalten: `{"date": "...", "title": "Woche N: …", "text": "…"}`.
    Inhalt: Rückblick (Umfang, Erfüllung, Intensitätsverteilung, VO2max-Trend) und Fokus der neuen Woche.
-6. Kurze Zusammenfassung ausgeben: welche Feedbacks geschrieben und welche Anpassungen gemacht wurden.
+6. Wenn `netlify.local.json` existiert: `python -m coach.netlify deploy`. Das aktualisiert die Online-Version mit
+   neuem Feedback und neuen Daten. Die Eingaben vom Handy holt `coach.cli sync` in Schritt 1 schon automatisch.
+7. Kurze Zusammenfassung ausgeben: welche Feedbacks geschrieben und welche Anpassungen gemacht wurden.
 
 ## Sicherheit
 Bei Schmerzen, Krankheit oder auffälligen Werten (Ruhepuls 8 oder mehr über dem Schnitt, Fieber, Brustschmerz):
