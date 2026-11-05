@@ -6,13 +6,24 @@ Claude betreut einen Läufer mit einem 12-Wochen-Plan zur VO2max-Steigerung. All
 Wochenrhythmus: Mo Kraft · Di Ruhe · Mi VO2max · Do Rad · Fr Schwelle/locker · Sa Ruhe · So langer Lauf.
 Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
 
+> **Journal pflegen:** Nach jeder Änderung am Projekt (Code, Aufbau, Einrichtung, wichtige Entscheidung) unten im
+> Abschnitt „Journal“ einen Eintrag ergänzen: Datum, was, warum, Stolperfallen. Persönliches (Namen, URLs, Werte,
+> Plan-Status) gehört **nicht** hierher, sondern in `CLAUDE.local.md` (lokal, nicht im Repo). Auch die aktualisieren.
+> Die normalen Coach-Checks brauchen keinen Journal-Eintrag, denn Feedback und Planänderungen stehen in `feedback/`
+> und im `changelog` von `plan/plan.json`.
+
 ## Projektaufbau
+- `coach/config.py`: lädt `athlete.json` (Fallback `athlete.example.json`), berechnet Zonen (aus `lthr`) und Paces (aus `five_k`)
 - `coach/sync.py`: Garmin Personal API (offizieller Client, nur lesend) und FIT-Auswertung nach `data/`, `data/fit/<id>.json`
-- `coach/analysis.py`: Plan-Abgleich, Auto-Analyse je Einheit, Tagesform, App-Zustand
+- `coach/analysis.py`: Plan-Abgleich, Auto-Analyse je Einheit, Tagesform, Belastungsampel, Prognose, App-Zustand
 - `coach/plan_builder.py`: erzeugt `plan/plan.json` **nur einmalig**. `--force` überschreibt alle Anpassungen, nur auf ausdrücklichen Wunsch verwenden.
-- `coach/config.py`: lädt `athlete.json`, berechnet Zonen (aus `lthr`) und Paces (aus `five_k`)
-- `app.py` + `web/`: lokale Web-App auf http://127.0.0.1:5057
+- `coach/userdata.py`: Eingaben aus der App (`on_watch`, `notes`, `moves`) in `userdata/userdata.json`, Merge per Zeitstempel
+- `coach/cli.py`: `status` / `sync` / `week [N]` für den Coach-Check
+- `coach/netlify.py`: Online-Version (`setup`, `pull`, `export`, `deploy`, `preview`), siehe `docs/netlify.md`
+- `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons)
+- `netlify/`: Edge Function `auth.js` (Passwort-Login), Function `userdata.mjs` (Netlify Blobs), `netlify.toml`
 - `feedback/<activityId>.json`: Coach-Feedback (von Claude geschrieben), `feedback/notes.json`: Coach-Nachrichten
+- Nicht im Repo: `athlete.json`, `data/`, `feedback/`, `plan/`, `userdata/`, `dist/`, `netlify.local.json`, `CLAUDE.local.md`
 
 Python immer über die virtuelle Umgebung (`.venv\Scripts\python.exe` unter Windows, `.venv/bin/python` sonst).
 Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgeben oder kopieren.**
@@ -87,3 +98,59 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
 Bei Schmerzen, Krankheit oder auffälligen Werten (Ruhepuls 8 oder mehr über dem Schnitt, Fieber, Brustschmerz):
 Training pausieren lassen und bei anhaltenden Beschwerden eine ärztliche Abklärung empfehlen.
 Kein medizinischer Rat über die Trainingsanpassung hinaus.
+
+## Journal
+
+Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
+
+### 2026-11-05 – Zurück-Navigation, Mobile-Aufräumen, Netlify-Feinschliff
+- Detailfenster mit fester Kopfleiste (Zurück/✕), Verlauf über `history.pushState`: `showModal`/`redrawModal`/
+  `closeModal` in `web/app.js`. `redrawModal` zeichnet neu ohne Verlaufseintrag (nach dem Speichern, beim
+  Bearbeiten). Unterseiten (`setView(v, {drill: true})`) zeigen oben einen Zurück-Pfeil (`history.state.depth`).
+- Heute am Handy einspaltig (Reihenfolge in `renderToday`, abhängig von `matchMedia`), Coach-Nachrichten
+  einklappbar, Plan mit Wochenliste oben, kompakte Kennzahlen und Tageszeilen.
+- **Stolperfalle:** Grid-Inhalte brauchen `min-width: 0`, sonst schieben lange Schilder die Seite seitlich aus dem
+  Bild. Nach UI-Änderungen bei 390 px Breite prüfen: `document.documentElement.scrollWidth === innerWidth`.
+- **Stolperfalle iOS:** Ein `position: fixed`-Kind in einem Element mit `backdrop-filter` wird an dieses gebunden.
+  Die Tab-Leiste steckt in der Kopfzeile. Mobil daher kein `backdrop-filter` auf Kopfzeile und Tab-Leiste.
+- Netlify: Das Badge „Powered by Netlify“ lässt sich im Gratis-Tarif nicht abschalten und läuft in einem
+  abgeschotteten Frame, ist also nicht per CSS versteckbar. Entscheidung: auf Netlify bleiben, Badge pro Gerät über
+  „Hide this badge“ ausblenden. Ein Umzug zu Cloudflare Pages + Access wurde angeboten und abgelehnt.
+- Netlify „Visitor access“ muss für Production aus sein („Previews only“), sonst sperrt der Team-Login auch
+  den Abgleich vom PC (`x-coach-key`). Steht in `docs/netlify.md`.
+- Manifest braucht `Content-Type: application/manifest+json` (Header in `netlify.toml`).
+
+### 2026-11-05 – Sieben App-Funktionen + Netlify (je ein Commit)
+- PWA (Icons per `tools/make_icons.py` ohne PIL), Spickzettel für den Garmin-Workout-Editor + Häkchen „auf der Uhr“,
+  eigenes Feedback (Gefühl/Beine/Schmerz/Notiz), Belastungsampel (Edwards-TRIMP, 7 Tage / 4-Wochen-Schnitt),
+  Verschieben mit Regelprüfung (Overlay `moves`, Backend `apply_moves`), Wettkampf-Prognose, Wetter (Open-Meteo im Browser).
+- Prognose: Garmin-VO2max ist **nicht** VDOT (46 ergäbe 21:30 auf 5 km, real 25:35). Deshalb VDOT aus echter
+  5-km-Leistung (letzter Test bzw. `five_k`), skaliert mit VO2max-Veränderung. Formel gegen Daniels geprüft
+  (20:00 ergibt 49,8).
+- Online-Version: statischer Export (`dist/`, `state.static = true`), Edge-Function-Login, Netlify Blobs für
+  Eingaben. Der PC gleicht beim `coach.cli sync` ab (pull) und lädt nach dem Check hoch (deploy).
+  `netlify-cli@27.14.1` per npx, `@netlify/blobs@11.1.6`.
+- Status (heute/verpasst) berechnet das Frontend nach dem Gerätedatum (`prepare()`), wichtig für die statische Version.
+
+### 2026-11-05 – Grundaufbau
+- Datenzugang: Garmins **offizielle Personal API** (persönlicher API-Schlüssel aus Garmin Connect, Python-Client
+  `garmin-connect-personal-api-python`). Community-MCPs mit Passwort-Login wurden bewusst nicht genommen.
+  Die API kann **nur lesen**: Workouts lassen sich nicht auf die Uhr schicken, der Athlet tippt sie selbst ein
+  (deshalb der Spickzettel).
+- Rundendaten: Nicht über REST verfügbar (`/splits` und `maxmet` liefern 404), aber in der FIT-Datei
+  (`download_activity` liefert eine ZIP, Auswertung mit `garmin-fit-sdk`). Intervalle sind nur mit strukturiertem
+  Uhr-Workout erkennbar (Runden-`intensity` warmup/active/rest/cooldown).
+- VO2max je Lauf: FIT-Nachricht 140, Feld 7 × 3,5 / 65536 (undokumentiert, stimmt mit der Garmin-Anzeige überein).
+- Zonen aus LTHR (0,77 / 0,855 / 0,935 × LTHR), Paces aus der 5-km-Zeit. Zonenfarben mit dem Dataviz-Validator
+  geprüft (immer mit Label Z1–Z5 anzeigen).
+- Plan: 12 Wochen, Basis / Aufbau / Spitze, Entlastung in W4/W8/W12, 5-km-Tests in W4 und W12, abwechslungsreiche
+  VO2max-Formen (der Reiz bleibt gleich, die Form wechselt).
+- Coach-Check als geplante Aufgabe in der Claude-Desktop-App (Vorlage: `docs/coach-check-prompt.md`).
+- **Stolperfallen Entwicklung:** Der Browser-Bereich öffnet nur Server aus `.claude/launch.json`. `preview_stop`
+  lässt manchmal einen Python-Prozess auf Port 5057 zurück, dann per Prozess-ID beenden. CRLF-Warnungen von Git
+  sind harmlos.
+
+### Offene Ideen
+- Unit-Tests für `analysis.py` (Abgleich, Intervall-Erkennung, Prognose) fehlen.
+- FIT-Workout-Export zum Kopieren per USB (`garmin-fit-sdk` hat einen Encoder). Bisher nicht gewünscht.
+- Service-Worker-Version (`VERSION` in `web/sw.js`) bei größeren Änderungen hochzählen.

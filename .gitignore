@@ -16,3 +16,4 @@ __pycache__/
 
 # Lokale Claude-Einstellungen
 .claude/settings.local.json
+CLAUDE.local.md
