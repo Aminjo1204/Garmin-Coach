@@ -63,6 +63,7 @@ def status() -> dict:
         "readiness": s["readiness"]["today"],
         "readiness_last7": s["readiness"]["series"][-7:],
         "training_load": s["load"]["today"],
+        "prediction": {k: v for k, v in (s["prediction"] or {}).items() if k != "trend"} or None,
         "vo2max_last": s["vo2"][-5:],
         "current_week": next((w for w in s["plan"]["weeks"] if w["week"] == cur_week), None),
         "upcoming": [{k: x.get(k) for k in ("id", "date", "weekday", "title", "kind", "key", "duration_min", "status",

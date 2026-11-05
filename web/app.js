@@ -793,6 +793,7 @@ function renderProgress(el) {
     </div>
     <div class="card" style="margin-top:16px"><h3>VO2max (Garmin-Schätzung je Lauf)</h3><div id="vo2Chart" class="chart" style="margin-top:8px"></div>
       <p class="muted" style="font-size:12.5px;margin-top:6px">Garmin zeigt den Wert gerundet an (z. B. 46,6 → 47). Er reagiert langsam: Ein Plus von 2–3 Punkten in 12 Wochen ist ein starkes Ergebnis.</p></div>
+    ${predictionCard(S.prediction)}
     <div class="card" style="margin-top:16px"><h3>Belastungsampel (akut ÷ chronisch)</h3>
       <p class="t2" style="font-size:13.5px;margin-top:4px">Trainingslast der letzten 7 Tage geteilt durch deinen 4-Wochen-Schnitt. Am besten bleibst du zwischen 0,8 und 1,3. Über 1,5 steigt das Verletzungsrisiko deutlich.</p>
       <div id="acwrChart" class="chart" style="margin-top:8px"></div></div>
@@ -811,6 +812,13 @@ function renderProgress(el) {
       yMin: Math.floor(Math.min(...vo2.map((v) => v.value)) - 1), yMax: S.athlete.vo2max_goal + 0.5, yFmt: (v) => v.toFixed(1), height: 220, dots: true,
     });
   } else $("#vo2Chart", el).innerHTML = `<p class="empty">Noch keine Werte.</p>`;
+  const pt = (S.prediction && S.prediction.trend) || [];
+  if (pt.length > 1) {
+    lineChart($("#predChart", el), {
+      series: [{ name: "5-km-Prognose", color: "var(--accent)", points: pt.map((x) => [x.date, x.t5k]) }],
+      yFmt: (v) => fmtPace(v), tickFmt: (v) => fmtPace(v), height: 170, dots: true,
+    });
+  }
   const ls = ((S.load && S.load.series) || []).filter((x) => x.acwr !== null);
   if (ls.length > 1) {
     lineChart($("#acwrChart", el), {
@@ -836,6 +844,21 @@ function renderProgress(el) {
     tipExtra: (i, pts) => { const d = ser.find((x) => x.date === pts[i][0]); return d && d.sleep_h ? ` · ${d.sleep_h} h` : ""; },
   });
 }
+function predictionCard(p) {
+  if (!p) return "";
+  const de = (x) => String(x).replace(".", ",");
+  return `<div class="card" style="margin-top:16px">
+    <h3>Wettkampf-Prognose</h3>
+    <p class="t2" style="font-size:13.5px;margin-top:4px">Basis: ${esc(p.source)} (${p.ref_time}) bei VO2max ${de(p.ref_vo2)}. Steigt dein VO2max, wird die Prognose schneller.</p>
+    <table class="laps pred"><tr><th>Strecke</th><th>Heute <span class="muted">(VO2max ${de(p.cur_vo2)})</span></th><th>Bei Ziel <span class="muted">(${de(p.goal_vo2)})</span></th><th>Gewinn</th></tr>
+      ${p.races.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td class="num">${r.now_fmt}</td><td class="num" style="color:var(--accent);font-weight:700">${r.goal_fmt}</td><td class="num t2">−${r.gain_fmt}</td></tr>`).join("")}
+    </table>
+    <div class="label" style="margin-top:16px">5-km-Prognose im Verlauf <span style="text-transform:none;letter-spacing:0">(niedriger = schneller)</span></div>
+    <div id="predChart" class="chart" style="margin-top:6px"></div>
+    <p class="muted" style="font-size:12px;margin-top:6px">Berechnet nach Jack Daniels (VDOT) bei optimalen Bedingungen. Für 10 km und Halbmarathon braucht es zusätzlich passendes Ausdauertraining über die Distanz. Nach jedem 5-km-Test wird die Basis automatisch aktualisiert.</p>
+  </div>`;
+}
+
 const lastVal = (ser, k) => { for (let i = ser.length - 1; i >= 0; i--) if (ser[i][k]) return ser[i][k]; return null; };
 
 // ---------- Diagramme (SVG) ----------
@@ -869,7 +892,7 @@ function lineChart(el, o) {
   const sx = (x) => pad.l + ((xv(x) - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
   const sy = (y) => pad.t + (1 - (y - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
   const ticks = niceTicks(y0, y1, 4);
-  let g = ticks.map((t) => `<line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${sy(t)}" y2="${sy(t)}"/><text class="axis-text" x="${pad.l - 8}" y="${sy(t) + 4}" text-anchor="end">${Number.isInteger(t) ? t : t.toFixed(1)}</text>`).join("");
+  let g = ticks.map((t) => `<line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${sy(t)}" y2="${sy(t)}"/><text class="axis-text" x="${pad.l - 8}" y="${sy(t) + 4}" text-anchor="end">${o.tickFmt ? o.tickFmt(t) : Number.isInteger(t) ? t : t.toFixed(1)}</text>`).join("");
   // Zonenbänder (HF-Chart)
   if (o.zoneBands) {
     g = o.zoneBands.map((z) => {

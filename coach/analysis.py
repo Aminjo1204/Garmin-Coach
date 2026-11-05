@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import statistics as st
 from datetime import date, datetime, timedelta
@@ -11,7 +12,7 @@ from typing import Any
 
 from . import userdata
 from .config import (ATHLETE, DATA_DIR, EASY_CAP_BIKE, EASY_CAP_RUN, FEEDBACK_DIR, FIT_DIR, NOTES_FILE, PLAN_FILE,
-                     SYNC_INFO_FILE, THR_HI, THR_LO, VO2_HR, sport_of)
+                     PLAN_START, SYNC_INFO_FILE, THR_HI, THR_LO, VO2_HR, sport_of)
 
 HFMAX_VO2 = VO2_HR  # Untergrenze VO2max-Bereich (Zone 5)
 
@@ -349,6 +350,78 @@ def load_series(acts: list[dict], fits: dict, days: int = 56) -> dict:
                 break
     return {"series": series, "today": {**t, "level": level}}
 
+
+# ---------- Wettkampf-Prognose (VDOT nach Daniels) ----------
+
+RACES = [("5 km", 5000), ("10 km", 10000), ("Halbmarathon", 21097.5)]
+
+
+def vdot_from(dist_m: float, t_sec: float) -> float:
+    t = t_sec / 60
+    v = dist_m / t
+    vo2 = -4.6 + 0.182258 * v + 0.000104 * v * v
+    pct = 0.8 + 0.1894393 * math.exp(-0.012778 * t) + 0.2989558 * math.exp(-0.1932605 * t)
+    return vo2 / pct
+
+
+def time_for(vdot: float, dist_m: float) -> float:
+    lo, hi = dist_m / 1000 * 120, dist_m / 1000 * 900  # 2:00–15:00 min/km
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if vdot_from(dist_m, mid) > vdot:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def fmt_time(sec: float) -> str:
+    sec = round(sec)
+    h, m, s = sec // 3600, sec % 3600 // 60, sec % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _mmss_to_sec(x: str) -> int:
+    parts = [int(p) for p in x.split(":")]
+    return parts[0] * 60 + parts[1] if len(parts) == 2 else parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def prediction(vo2: list[dict], tests: list[dict]) -> dict | None:
+    """Basis = echte 5-km-Leistung (letzter Test, sonst five_k aus athlete.json), skaliert mit der VO2max-Veränderung."""
+    if tests:
+        ref = tests[-1]
+        ref_time, ref_date, source = _mmss_to_sec(ref["time"]), ref["date"], f"5-km-Test vom {ref['date']}"
+    elif ATHLETE.get("five_k"):
+        ref_time, ref_date, source = _mmss_to_sec(ATHLETE["five_k"]), None, "5-km-Zeit aus deinem Profil"
+    else:
+        return None
+    # VO2max zum Zeitpunkt der Referenz: Ø der Werte in den 14 Tagen davor (sonst Startwert aus dem Profil)
+    if ref_date:
+        win = [v["value"] for v in vo2 if ref_date >= v["date"] >= (date.fromisoformat(ref_date) - timedelta(days=14)).isoformat()]
+    else:
+        start = PLAN_START.isoformat()
+        win = [v["value"] for v in vo2 if v["date"] <= start][-4:]
+    ref_vo2 = st.mean(win) if win else float(ATHLETE.get("vo2max_start") or 0)
+    if not ref_vo2:
+        return None
+    cur_vo2 = st.mean([v["value"] for v in vo2[-3:]]) if vo2 else ref_vo2
+    goal_vo2 = float(ATHLETE.get("vo2max_goal") or cur_vo2)
+    ref_vdot = vdot_from(5000, ref_time)
+
+    def times(v):
+        vd = ref_vdot * v / ref_vo2
+        return {name: round(time_for(vd, d)) for name, d in RACES}
+
+    now, goal = times(cur_vo2), times(goal_vo2)
+    trend = [{"date": v["date"], "t5k": round(time_for(ref_vdot * v["value"] / ref_vo2, 5000))} for v in vo2[-40:]]
+    return {
+        "source": source, "ref_time": fmt_time(ref_time), "ref_vo2": round(ref_vo2, 1), "ref_vdot": round(ref_vdot, 1),
+        "cur_vo2": round(cur_vo2, 1), "goal_vo2": goal_vo2, "vdot_now": round(ref_vdot * cur_vo2 / ref_vo2, 1),
+        "races": [{"name": n, "now": now[n], "now_fmt": fmt_time(now[n]), "goal": goal[n], "goal_fmt": fmt_time(goal[n]),
+                   "gain_fmt": fmt_time(now[n] - goal[n])} for n, _ in RACES],
+        "trend": trend,
+    }
+
 # ---------- Tagesform ----------
 
 def readiness_series(data: dict, days: int = 42) -> list[dict]:
@@ -542,6 +615,9 @@ def build_state() -> dict:
         if v:
             vo2.append({"date": a["startTimeLocal"][:10], "value": v})
 
+    tests = [{"date": a["date"], "time": a["analysis"]["metrics"]["test_5k"]} for a in reversed(out_acts)
+             if a["analysis"]["metrics"].get("test_5k")]
+
     run_recent = [a for a in out_acts if a["analysis"]["metrics"]["sport"] == "run"
                   and a["date"] >= (date.today() - timedelta(days=28)).isoformat()
                   and a["analysis"]["metrics"]["zone_min"]]
@@ -560,6 +636,7 @@ def build_state() -> dict:
         "load": load,
         "vo2": vo2,
         "zone_4w": zone_4w,
+        "prediction": prediction(vo2, tests),
         "notes": data["notes"],
     }
 
