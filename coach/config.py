@@ -31,7 +31,8 @@ def _load_athlete() -> dict:
 _A = _load_athlete()
 
 ATHLETE = {k: _A.get(k) for k in ("name", "age", "weight_kg", "height_cm", "hr_rest", "hr_max", "lthr",
-                                  "vo2max_start", "vo2max_goal", "five_k", "coach_context")}
+                                  "vo2max_start", "vo2max_goal", "five_k", "coach_context",
+                                  "location", "training_hour")}
 
 PLAN_START = date.fromisoformat(_A["plan_start"])   # Montag von Woche 1
 PLAN_INTRO_DAYS = int(_A.get("plan_intro_days", 3))  # lockere Einstiegstage vor Woche 1 (0 = keine)

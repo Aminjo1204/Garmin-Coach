@@ -13,5 +13,11 @@
   "plan_start": "2026-11-09",
   "plan_intro_days": 3,
   "bike_hr_offset": 10,
+  "location": {
+    "name": "Berlin",
+    "lat": 52.52,
+    "lon": 13.405
+  },
+  "training_hour": 18,
   "coach_context": "Freitext für den Coach: Vorgeschichte, Muster, Verletzungen, Vorlieben (z. B. 'trainiert abends', 'Knieprobleme 2025')."
 }

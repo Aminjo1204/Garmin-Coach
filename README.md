@@ -19,6 +19,13 @@ gleicht jede Einheit mit einem 12-Wochen-Plan zur **VO2max-Steigerung** ab und z
   - Pace und Puls je Wiederholung, Zeit in Zonen, Zeit im VO2max-Bereich
   - ob der geplante Reiz erreicht wurde, mit Bewertung
 - **Coach-Feedback:** Claude schreibt zu jeder Einheit ein persönliches Feedback und passt den Plan an (siehe unten).
+- **Dein Feedback:** Nach jeder Einheit Gefühl, Beine, Schmerzen und eine Notiz eintragen. Der Coach reagiert darauf.
+- **Spickzettel:** jedes Workout in der Eingabe-Reihenfolge des Garmin-Workout-Editors, mit Häkchen „auf der Uhr“
+- **Einheiten verschieben:** innerhalb der Woche, mit Regelprüfung (nie zwei harte Tage hintereinander)
+- **Belastungsampel:** akute (7 Tage) gegen chronische (4 Wochen) Trainingslast als Schutz vor zu schnellem Steigern
+- **Wettkampf-Prognose:** 5 km, 10 km und Halbmarathon heute und bei Ziel-VO2max (VDOT nach Daniels)
+- **Wetter-Hinweis:** Glätte, Kälte, Sturm oder Hitze zur Trainingszeit, mit Alternativen wie Laufband oder Rolle
+  ([Open-Meteo](https://open-meteo.com), ohne Anmeldung)
 - **Fortschritt:** VO2max-Verlauf pro Lauf, Intensitätsverteilung, HRV mit Normalbereich, Ruhepuls und Schlaf.
 - **Als App aufs Handy:** Die Seite ist eine PWA. Im Browser „Zum Startbildschirm hinzufügen“ wählen, dann startet sie
   mit eigenem Icon im Vollbild und zeigt den letzten Stand auch offline. Das braucht HTTPS, z. B. über Netlify.
@@ -69,6 +76,7 @@ Alternativ geht die Umgebungsvariable `GARMIN_PERSONAL_API_KEY`. Den Schlüssel 
 | `vo2max_start`, `vo2max_goal` | aktueller Garmin-VO2max und Ziel |
 | `plan_start` | ein **Montag**, Beginn von Woche 1 |
 | `plan_intro_days` | lockere Einstiegstage vor Woche 1 (0–3) |
+| `location`, `training_hour` | Ort (Name, lat, lon) und übliche Trainingszeit für den Wetter-Hinweis |
 | `coach_context` | Freitext für den Coach: Vorgeschichte, Verletzungen, Muster, Vorlieben |
 
 Optional lassen sich Zonen (`"zones_run": [[0,139],[140,155],…]`) und Paces (`"paces": {"vo2": "4:55–5:05", …}`) direkt vorgeben.

@@ -75,6 +75,7 @@ async function load() {
   }
   render();
   updateSyncLabel();
+  loadWeather();
   const last = S.sync && S.sync.last_sync ? new Date(S.sync.last_sync) : null;
   if (!last || Date.now() - last.getTime() > 30 * 60 * 1000) doSync(true);
 }
@@ -257,6 +258,7 @@ function renderToday(el) {
       </div>
       <div class="stack">
         ${readinessCard(S.readiness.today)}
+        ${weatherCard()}
         ${loadCard(S.load && S.load.today)}
         <div class="card">
           <div class="label">Als Nächstes</div>
@@ -337,6 +339,77 @@ function loadCard(t) {
     <div class="gauge-scale"><span style="left:0;transform:none">0</span><span style="left:40%">0,8</span><span style="left:65%">1,3</span><span style="left:75%">1,5</span><span style="left:100%;transform:translateX(-100%)">2+</span></div>
     <p class="t2" style="font-size:13.5px;margin-top:8px">${esc(t.level.text)}</p>
     <p class="muted" style="font-size:12px;margin-top:6px">Last 7 Tage: ${t.acute} · Ø pro Woche (4 Wo.): ${t.chronic}</p>
+  </div>`;
+}
+
+// ----- Wetter (Open-Meteo, ohne Anmeldung) -----
+let W = null;
+const WX_ICO = (c) => (c === 0 ? "☀️" : c <= 2 ? "🌤️" : c === 3 ? "☁️" : c <= 48 ? "🌫️" : c <= 57 ? "🌦️" : c <= 67 ? "🌧️" : c <= 77 ? "🌨️" : c <= 82 ? "🌧️" : c <= 86 ? "🌨️" : "⛈️");
+
+async function loadWeather() {
+  const loc = S && S.athlete && S.athlete.location;
+  if (!loc) return;
+  const key = `wx:${loc.lat},${loc.lon}`;
+  try {
+    const c = JSON.parse(localStorage.getItem(key) || "null");
+    if (c && Date.now() - c.t < 30 * 60 * 1000) { W = c.d; return; }
+  } catch (_) {}
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}` +
+      "&hourly=temperature_2m,apparent_temperature,precipitation,snowfall,weather_code,wind_gusts_10m" +
+      "&past_hours=12&forecast_days=3&timezone=auto";
+    const r = await fetch(url);
+    if (!r.ok) return;
+    W = (await r.json()).hourly;
+    try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: W })); } catch (_) {}
+    if (view === "heute") render();
+  } catch (_) {}
+}
+
+/** Bewertet das Wetter zur Trainingszeit. Glätte: ≤ 1 °C und Niederschlag/Schnee in den 12 h davor oder gefrierender Regen. */
+function weatherFor(day, hour, s) {
+  if (!W) return null;
+  const i = W.time.indexOf(`${day}T${String(hour).padStart(2, "0")}:00`);
+  if (i < 0) return null;
+  const at = (k) => W[k][i];
+  const prev = (k) => W[k].slice(Math.max(0, i - 12), i + 1);
+  const sum = (a) => a.reduce((x, y) => x + (y || 0), 0);
+  const temp = at("temperature_2m"), feel = at("apparent_temperature"), code = at("weather_code");
+  const gust = at("wind_gusts_10m"), rain = at("precipitation");
+  const wet12 = sum(prev("precipitation")), snow12 = sum(prev("snowfall"));
+  const hints = [];
+  const indoorRun = s && s.sport === "run" ? (isHard(s) ? "Intervalle aufs Laufband verlegen (1 % Steigung, gleiche Pace)" : "Laufband oder stattdessen locker aufs Rad (Rolle)") : "";
+  if ([56, 57, 66, 67].includes(code) || (temp <= 1 && (wet12 > 0.2 || snow12 > 0))) {
+    hints.push(["bad", `Glättegefahr (${temp.toFixed(0)} °C nach Niederschlag)`, s && s.sport !== "strength" ? (s.sport === "bike" ? "Rad drinnen auf der Rolle" : indoorRun) : ""]);
+  }
+  if (code >= 95) hints.push(["bad", "Gewitter", "drinnen trainieren oder Einheit verschieben"]);
+  if (feel <= -10) hints.push(["bad", `Sehr kalt (gefühlt ${feel.toFixed(0)} °C)`, s && isHard(s) ? "harte Einheit besser drinnen" : "Schichten, Mütze, Handschuhe, Mund und Nase bedecken"]);
+  else if (feel <= 0) hints.push(["warn", `Kalt (gefühlt ${feel.toFixed(0)} °C)`, "lange Hose, Handschuhe, 5 min länger einlaufen. Bei Intervallen zählt der Puls, die Pace darf 5–10 s langsamer sein"]);
+  if (s && s.sport === "bike" && temp <= 3 && !hints.some((h) => h[0] === "bad")) hints.push(["warn", "Kalt für draußen auf dem Rad", "Rolle oder Ergometer ist die angenehmere Wahl"]);
+  if (rain >= 2) hints.push(["warn", `Starker Regen (${rain.toFixed(1)} mm/h)`, "Regenjacke, oder Laufband"]);
+  if (gust >= 50) hints.push(["warn", `Sturmböen bis ${Math.round(gust)} km/h`, "windgeschützte Strecke, Intervalle nach Puls statt Pace"]);
+  if (temp >= 25) hints.push(["warn", `Warm (${temp.toFixed(0)} °C)`, "früh oder spät laufen, viel trinken, Puls steigt schneller"]);
+  return { day, hour, temp, feel, code, gust, rain, hints };
+}
+
+function weatherCard() {
+  if (!W || !S.athlete.location) return "";
+  const hour = S.athlete.training_hour ?? 18;
+  const nowH = new Date().getHours();
+  // nächste geplante Einheit in den nächsten 2 Tagen (heute nur, wenn die Trainingszeit noch nicht vorbei ist)
+  const s = sessions().find((x) => x.sport !== "rest" && x.sport !== "strength" && x.status !== "done" &&
+    (x.date > S.today || (x.date === S.today && nowH <= hour)) && x.date <= addDays(S.today, 2));
+  const day = s ? s.date : (nowH <= hour ? S.today : addDays(S.today, 1));
+  const w = weatherFor(day, hour, s);
+  if (!w) return "";
+  const ok = !w.hints.length;
+  return `<div class="card">
+    <div class="row between"><div class="label">Wetter · ${day === S.today ? "heute" : fmtDate(day)} ${hour} Uhr${s ? " · " + esc(KIND[s.kind] || s.title) : ""}</div><span class="muted" style="font-size:12px">${esc(S.athlete.location.name || "")}</span></div>
+    <div class="row" style="gap:12px;margin-top:8px"><span style="font-size:30px">${WX_ICO(w.code)}</span>
+      <div><div class="num" style="font-size:22px;font-weight:700">${w.temp.toFixed(0)} °C <span class="t2" style="font-size:13px;font-weight:500">gefühlt ${w.feel.toFixed(0)} °C</span></div>
+      <div class="t2" style="font-size:12.5px">Niederschlag ${w.rain.toFixed(1)} mm · Böen ${Math.round(w.gust)} km/h</div></div></div>
+    ${ok ? `<p class="t2" style="font-size:13.5px;margin-top:10px"><span class="ico ok">✓</span> Gute Bedingungen für draußen.</p>`
+      : `<ul class="factors" style="margin-top:10px">${w.hints.map(([lvl, t, tip]) => `<li><span class="ico ${lvl}">${ICON[lvl]}</span><span><b style="color:var(--text)">${esc(t)}</b>${tip ? ": " + esc(tip) : ""}</span></li>`).join("")}</ul>`}
   </div>`;
 }
 
