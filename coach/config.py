@@ -18,6 +18,7 @@ PLAN_FILE = ROOT / "plan" / "plan.json"
 FEEDBACK_DIR = ROOT / "feedback"          # Coach-Feedback von Claude: <activityId>.json
 NOTES_FILE = FEEDBACK_DIR / "notes.json"   # allgemeine Coach-Nachrichten
 SYNC_INFO_FILE = DATA_DIR / "sync_info.json"
+USERDATA_FILE = ROOT / "userdata" / "userdata.json"  # Eingaben aus der App
 ATHLETE_FILE = ROOT / "athlete.json"
 ATHLETE_EXAMPLE = ROOT / "athlete.example.json"
 

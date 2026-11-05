@@ -9,6 +9,9 @@ let S = null;
 let view = "heute";
 let weekSel = null;
 let actFilter = "plan";
+let U = { on_watch: {}, notes: {}, moves: {} };  // Eingaben aus der App (siehe coach/userdata.py)
+let modalRefresh = null;
+const API_USER = "/api/userdata";
 try { view = localStorage.getItem("view") || "heute"; } catch (_) {}
 
 const ZONE_NAMES = ["Regeneration", "Grundlage", "Tempo", "Schwelle", "VO2max"];
@@ -35,9 +38,36 @@ const fmtStepMin = (m) => (m < 1 ? `${Math.round(m * 60)} s` : `${+m.toFixed(1)}
 const addDays = (s, n) => { const d = toDate(s); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
 // ---------- Daten ----------
+async function loadUser() {
+  try {
+    const r = await fetch(API_USER);
+    if (r.ok) U = await r.json();
+  } catch (_) {}
+}
+
+const uval = (kind, key) => { const e = (U[kind] || {})[key]; return e ? e.value : undefined; };
+
+async function uset(kind, key, value) {
+  U[kind] = U[kind] || {};
+  U[kind][key] = { value, at: new Date().toISOString() };
+  refresh();
+  try {
+    const r = await fetch(API_USER, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, key, value }) });
+    if (!r.ok) throw new Error(r.status);
+    U = await r.json();
+  } catch (_) {
+    toast("Speichern fehlgeschlagen. Bist du offline?");
+  }
+}
+
+function refresh() {
+  render();
+  if (!$("#modal").hidden && modalRefresh) modalRefresh();
+}
+
 async function load() {
   try {
-    const r = await fetch("/api/state");
+    const [r] = await Promise.all([fetch("/api/state"), loadUser()]);
     S = await r.json();
   } catch (e) {
     $("#view").innerHTML = `<div class="card">Server nicht erreichbar. Läuft <code>app.py</code>?</div>`;
@@ -107,6 +137,15 @@ function render() {
 function bindCommon(root) {
   $$("[data-act]", root).forEach((n) => n.addEventListener("click", (e) => { e.stopPropagation(); openActivity(+n.dataset.act); }));
   $$("[data-session]", root).forEach((n) => n.addEventListener("click", () => openSession(n.dataset.session)));
+  $$("[data-watch]", root).forEach((n) => n.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const id = n.dataset.watch;
+    uset("on_watch", id, uval("on_watch", id) ? null : true);
+  }));
+  $$("[data-copy]", root).forEach((n) => n.addEventListener("click", async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { await navigator.clipboard.writeText(n.dataset.copy); toast("Name kopiert."); } catch (_) { toast(n.dataset.copy); }
+  }));
 }
 
 // ----- Heute -----
@@ -129,6 +168,7 @@ function renderToday(el) {
     <div class="grid grid-hero">
       <div class="stack">
         ${main ? sessionCard(main, { hero: true }) : `<div class="card"><h3>Heute nichts geplant</h3><p class="t2" style="margin-top:6px">Der Plan startet am ${fmtDate(planStart)}</p></div>`}
+        ${watchReminder()}
         ${notes.map((n) => `<div class="card note-card"><div class="label">Coach · ${fmtDate(n.date)}</div><h3 style="margin-top:6px">${esc(n.title)}</h3><p class="t2" style="margin-top:6px;white-space:pre-line">${esc(n.text)}</p></div>`).join("")}
         ${latest ? `<div><div class="section-head"><h3>Letzte Einheit</h3><button class="chip" data-view-link="aktivitaeten">Alle ansehen →</button></div>${activityFeedbackCard(latest)}</div>` : ""}
       </div>
@@ -147,6 +187,17 @@ function renderToday(el) {
       </div>
     </div>`;
   $$("[data-view-link]", el).forEach((b) => b.addEventListener("click", () => setView(b.dataset.viewLink)));
+}
+
+function watchReminder() {
+  const until = addDays(S.today, 4);
+  const todo = sessions().filter((s) => s.date >= S.today && s.date <= until && needsWatch(s) && !uval("on_watch", s.id));
+  if (!todo.length) return "";
+  return `<div class="card" style="border-color:rgba(250,178,25,.35)">
+    <div class="label" style="color:var(--warning)">⌚ Noch auf die Uhr bringen</div>
+    <div class="stack" style="gap:8px;margin-top:10px">${todo.map((s) => `<div class="row between clickable" data-session="${s.id}" style="cursor:pointer">
+      <div><div class="day-title">${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)} · Name: ${esc(workoutName(s))}</div></div><span class="chip">Spickzettel →</span></div>`).join("")}</div>
+  </div>`;
 }
 
 function weekStrip(wk) {
@@ -232,7 +283,7 @@ function sessionCard(s, opt = {}) {
       ${s.exercises ? exerciseTable(s.exercises) : ""}
       <p class="purpose"><b style="color:var(--text)">Warum?</b> ${esc(s.purpose)}</p>
       ${tipsList(s.tips)}
-      ${s.sport === "run" && s.steps.length > 1 ? `<details class="more"><summary>So legst du das Workout auf der Uhr an</summary><p class="t2" style="font-size:13.5px;margin-top:8px">Garmin Connect App → Training &amp; Planung → Workouts → Workout erstellen → Laufen. Lege die Schritte wie oben an (Aufwärmen, Wiederholung mit Belastung + Erholung, Abkühlen) und stelle als Ziel „Herzfrequenz – benutzerdefiniert“ mit den bpm-Werten ein. Speichern, an die Uhr senden, dann am Trainingstag unter Training → Workouts starten. So erkennt die App jede Wiederholung.</p></details>` : ""}`;
+      ${needsWatch(s) ? garminSheet(s, opt.openSheet) : ""}`;
   return `<div class="card">
     <div class="row between wrap">
       <div class="row wrap" style="gap:8px">
@@ -249,6 +300,45 @@ function sessionCard(s, opt = {}) {
     ${acts.length ? `<div style="margin-top:14px" class="stack">${acts.map((a) => activityMini(a)).join("")}</div>` : ""}
     ${acts.length && !opt.expand ? `<details class="more"><summary>Geplante Einheit anzeigen</summary>${body}</details>` : body}
   </div>`;
+}
+
+// ----- Spickzettel für den Garmin-Workout-Editor -----
+const STEP_TYPE = { warmup: "Aufwärmen", cooldown: "Abkühlen", recovery: "Erholung" };
+const needsWatch = (s) => s.sport === "run" && (s.steps || []).length > 1;
+const workoutName = (s) => `W${String(s.week).padStart(2, "0")} ${s.weekday} ${shortTitle(s)}`.slice(0, 40);
+const fmtClock = (min) => { const sec = Math.round(min * 60); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
+
+function sheetStep(st, sport, label) {
+  const type = STEP_TYPE[st.type] || (sport === "bike" ? "Radfahren" : "Laufen");
+  const dur = st.dist_m ? `Distanz <b>${(st.dist_m / 1000).toLocaleString("de-AT", { minimumFractionDigits: 2 })} km</b>` : `Zeit <b>${fmtClock(st.min)}</b>`;
+  const target = st.hr && st.hr[0] && st.type !== "recovery"
+    ? `Herzfrequenz → Benutzerdefiniert <b>${st.hr[0]}–${st.hr[1]} bpm</b>` : "Kein Ziel";
+  const notes = [st.pace && /\d:\d\d/.test(st.pace) ? `Pace ${st.pace} /km` : st.pace, st.note].filter(Boolean).join(" · ");
+  return `<li><span class="sh-n">${label}</span><div><b>${type}</b> · ${dur}<div class="sh-t">Ziel: ${target}</div>${notes ? `<div class="sh-note">Notiz: ${esc(notes)}</div>` : ""}</div></li>`;
+}
+
+function garminSheet(s, open) {
+  const items = s.steps.map((st, i) => {
+    const n = i + 1;
+    if (st.type === "repeat") {
+      const sub = st.steps.map((x, j) => sheetStep(x, s.sport, `${n}.${j + 1}`)).join("");
+      return `<li class="sh-rep"><span class="sh-n">${n}</span><div><b>Wiederholen</b> · <b>${st.times} Mal</b>${st.label ? ` (${esc(st.label)})` : ""}<ol class="sheet">${sub}</ol></div></li>`;
+    }
+    return sheetStep(st, s.sport, String(n));
+  }).join("");
+  const name = workoutName(s);
+  return `<details class="more sheet-box" ${open ? "open" : ""}>
+    <summary>⌚ Garmin-Eingabe (Spickzettel)${uval("on_watch", s.id) ? ` <span class="watch-ok">✓ auf der Uhr</span>` : ""}</summary>
+    <p class="t2" style="font-size:13px;margin-top:8px">Garmin Connect App → <b>Training &amp; Planung → Workouts → Workout erstellen → Laufen</b>. Schritte in dieser Reihenfolge anlegen, speichern, dann <b>An Gerät senden</b>.</p>
+    <div class="row wrap" style="margin-top:10px;gap:8px"><span class="t2" style="font-size:13px">Name:</span><code class="wname">${esc(name)}</code><button class="chip" data-copy="${esc(name)}">Kopieren</button></div>
+    <ol class="sheet">${items}</ol>
+    ${watchToggle(s)}
+  </details>`;
+}
+
+function watchToggle(s) {
+  const on = !!uval("on_watch", s.id);
+  return `<button class="watch-btn ${on ? "on" : ""}" data-watch="${s.id}">${on ? "✓ Ist auf der Uhr" : "Auf der Uhr? Abhaken ✓"}</button>`;
 }
 
 function mainTarget(s) {
@@ -339,7 +429,7 @@ function renderWeek(el) {
     <div class="stack" style="gap:10px">
       ${ss.map((s) => `<div class="card tight day clickable ${s.date === S.today ? "is-today" : ""} ${s.sport === "rest" ? "rest" : ""}" data-session="${s.id}">
         <div class="dow">${s.weekday}<small>${fmtDM(s.date)}</small></div>
-        <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)} ${s.key ? `<span class="chip key" style="margin-left:4px">★</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:4px">angepasst</span>` : ""}</div>
+        <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)} ${s.key ? `<span class="chip key" style="margin-left:4px">★</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:4px">angepasst</span>` : ""}${needsWatch(s) && s.status !== "done" && s.status !== "missed" ? (uval("on_watch", s.id) ? `<span class="chip watch-chip on" style="margin-left:4px" title="Auf der Uhr">⌚ ✓</span>` : `<span class="chip watch-chip" style="margin-left:4px" title="Noch nicht auf der Uhr">⌚ fehlt</span>`) : ""}</div>
           <div class="day-sub">${s.sport === "rest" ? esc(s.tips[0] || "") : `${fmtMin(s.duration_min)}${s.distance_km ? ` · ~${s.distance_km} km` : ""} · ${esc(mainTarget(s) || KIND[s.kind])}`}</div>
           ${(s.activity_ids || []).map((id) => { const a = actById(id); return a ? `<div class="day-sub" style="margin-top:4px;color:var(--text)" data-act="${a.id}">↳ ${esc(a.name)} · ${actStats(a).replace(/<[^>]+>/g, " ")} <span class="rating ${a.analysis.rating}" style="margin-left:6px">${a.analysis.rating}</span></div>` : ""; }).join("")}
         </div>
@@ -467,10 +557,11 @@ async function openActivity(id) {
 
 const stat = (k, v) => `<div class="stat"><div class="v num">${esc(v)}</div><div class="k">${esc(k)}</div></div>`;
 
-function openSession(id) {
+function openSession(id, openSheet = false) {
   const s = sessionById(id);
   if (!s) return;
-  openModal(sessionCard(s, { expand: true }).replace('class="card"', 'class=""'));
+  openModal(sessionCard(s, { expand: true, openSheet }).replace('class="card"', 'class=""'));
+  modalRefresh = () => openSession(id, true);
 }
 
 function openModal(html) {
@@ -480,6 +571,7 @@ function openModal(html) {
   bindCommon($("#modalBody"));
 }
 function closeModal() {
+  modalRefresh = null;
   $("#modal").hidden = true;
   document.body.style.overflow = "";
   hideTip();

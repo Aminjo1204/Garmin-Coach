@@ -3,6 +3,7 @@ athlete.json
 data/
 feedback/
 plan/
+userdata/
 
 # Python
 .venv/

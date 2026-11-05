@@ -6,8 +6,9 @@ import mimetypes
 import os
 import threading
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
+from coach import userdata
 from coach.analysis import activity_detail, build_state
 from coach.config import ROOT
 from coach.sync import sync
@@ -44,6 +45,21 @@ def do_sync():
 def detail(aid: int):
     d = activity_detail(aid)
     return (jsonify(d), 200) if d else (jsonify({"error": "keine FIT-Daten"}), 404)
+
+
+@app.get("/api/userdata")
+def get_userdata():
+    return jsonify(userdata.load())
+
+
+@app.post("/api/userdata")
+def post_userdata():
+    body = request.get_json(silent=True) or {}
+    try:
+        d = userdata.set_entry(body.get("kind"), body.get("key"), body.get("value"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(d)
 
 
 @app.after_request

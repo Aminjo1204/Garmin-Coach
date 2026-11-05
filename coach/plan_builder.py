@@ -19,8 +19,11 @@ from .config import (ATHLETE, BIKE_ZONES, EASY_CAP_RUN, HR_TARGETS as HR, PACES,
 # ---------- Bausteine ----------
 
 
-def step(kind, label, minutes, zone, hr=None, pace=None, note=None):
-    return {"type": kind, "label": label, "min": round(minutes, 2), "zone": zone, "hr": hr, "pace": pace, "note": note}
+def step(kind, label, minutes, zone, hr=None, pace=None, note=None, dist_m=None):
+    s = {"type": kind, "label": label, "min": round(minutes, 2), "zone": zone, "hr": hr, "pace": pace, "note": note}
+    if dist_m:
+        s["dist_m"] = dist_m  # Distanz-Schritt (auf der Uhr: Dauer = Distanz)
+    return s
 
 
 def rep(times, *steps, label=None):
@@ -103,8 +106,8 @@ def run_session(kind, title, steps, tips=None, key=False):
             "purpose": PURPOSE[kind if kind in PURPOSE else "easy"], "steps": steps, "tips": tips or []}
 
 
-def work(label, minutes, pace=None, zone=5, hr=None, note=None):
-    return step("work", label, minutes, zone, hr or HR["vo2"], pace or PACES["vo2"], note)
+def work(label, minutes, pace=None, zone=5, hr=None, note=None, dist_m=None):
+    return step("work", label, minutes, zone, hr or HR["vo2"], pace or PACES["vo2"], note, dist_m)
 
 
 def vo2(reps, minutes, rest, pace=None, extra_tip=None):
@@ -132,7 +135,7 @@ def distance_reps(reps, meters, rest, pace=None):
     """N × X m – Distanz statt Zeit (Bahn oder flache Strecke)."""
     pace = pace or PACES["vo2"]
     minutes = meters / 1000 * pace_sec(pace) / 60
-    w = work(f"{meters} m schnell", minutes, pace, note=f"Distanz-Schritt ({meters} m)")
+    w = work(f"{meters} m schnell", minutes, pace, dist_m=meters)
     return run_session("vo2", f"VO2max: {reps} × {meters} m", [warmup(15), rep(reps, w, jog(rest)), cooldown(10)],
                        ["Ideal auf der Bahn oder einer flachen, vermessenen Strecke.",
                         f"Ziel-Pace {pace} /km ≈ {minutes:.1f} min pro Wiederholung."] + VO2_TIPS[1:], key=True)
@@ -185,7 +188,7 @@ def threshold(blocks, minutes, rest, pace=None):
 
 def cruise(reps, meters=1000, rest=1):
     minutes = meters / 1000 * pace_sec(PACES["threshold"]) / 60
-    w = step("work", f"{meters} m Schwelle", minutes, 4, HR["thr"], PACES["threshold"], f"Distanz-Schritt ({meters} m)")
+    w = step("work", f"{meters} m Schwelle", minutes, 4, HR["thr"], PACES["threshold"], dist_m=meters)
     return run_session("threshold", f"Cruise-Intervalle: {reps} × {meters} m",
                        [warmup(15, 2), rep(reps, w, jog(rest)), cooldown(10)],
                        ["Kurze Pausen, Schwellentempo: Am Ende soll es sich wie ein langer Tempolauf anfühlen.",
@@ -236,7 +239,7 @@ def long_run(minutes, finish=None):
 
 def test5k():
     steps = [warmup(15, 3), step("work", "5 km Test", pace_sec(PACES["five_k"]) * 5 / 60, 5, None,
-                                 "so schnell wie gleichmäßig möglich", f"Referenz: {PACES['five_k']} /km"),
+                                 "so schnell wie gleichmäßig möglich", f"Referenz: {PACES['five_k']} /km", 5000),
              cooldown(10)]
     return run_session("test", "5-km-Test", steps,
                        ["Flache Strecke, ausgeruht, nicht nüchtern.",
