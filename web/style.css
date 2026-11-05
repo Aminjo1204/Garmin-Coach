@@ -156,6 +156,13 @@ ol.sheet ol.sheet > li { background: var(--surface); }
 .watch-chip { color: var(--warning); border-color: rgba(250, 178, 25, .35); }
 .watch-chip.on { color: #4fd44f; border-color: rgba(12, 163, 12, .4); }
 
+/* Verschieben */
+.move-list { display: grid; gap: 6px; margin-top: 10px; }
+.move-opt { display: grid; grid-template-columns: 18px 92px 1fr; gap: 8px; align-items: baseline; text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; }
+.move-opt:hover:not(:disabled) { border-color: var(--accent); }
+.move-opt:disabled { opacity: .5; cursor: default; }
+.move-opt.current { opacity: .8; border-style: dashed; }
+
 /* Eigenes Feedback */
 .mynote { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
 .noteform { display: grid; gap: 8px; background: var(--surface-2); border-radius: 12px; padding: 14px; }

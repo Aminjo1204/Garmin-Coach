@@ -73,6 +73,9 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
      - einen Eintrag in `changelog` anhängen: `{"date": "...", "text": "..."}`
      - Neue Einheiten mit den Bausteinen aus `coach/plan_builder.py` erzeugen, z. B. `pb.easy(35)`, `pb.vo2(4, 4, 3)`,
        `pb.pyramid([2, 3, 4, 3, 2])`.
+   - Vom Athleten in der App verschobene Einheiten (`moved_from` gesetzt) respektieren. Sie liegen als Overlay in
+     `userdata/userdata.json` (`moves`), `plan/plan.json` bleibt unverändert. Wenn du selbst verschiebst: `date` und
+     `weekday` in `plan/plan.json` ändern, die `id` bleibt gleich.
 5. Montags (oder beim ersten Check einer neuen Planwoche) eine Wochen-Nachricht oben in `feedback/notes.json`
    einfügen. Die Liste ist neueste zuerst, höchstens 10 behalten: `{"date": "...", "title": "Woche N: …", "text": "…"}`.
    Inhalt: Rückblick (Umfang, Erfüllung, Intensitätsverteilung, VO2max-Trend) und Fokus der neuen Woche.

@@ -65,7 +65,8 @@ def status() -> dict:
         "training_load": s["load"]["today"],
         "vo2max_last": s["vo2"][-5:],
         "current_week": next((w for w in s["plan"]["weeks"] if w["week"] == cur_week), None),
-        "upcoming": [{k: x[k] for k in ("id", "date", "weekday", "title", "kind", "key", "duration_min", "status", "adjusted")}
+        "upcoming": [{k: x.get(k) for k in ("id", "date", "weekday", "title", "kind", "key", "duration_min", "status",
+                                            "adjusted", "moved_from")}
                      for x in upcoming],
         "missed": [{k: x[k] for k in ("id", "date", "title")} for x in sessions if x["status"] == "missed"][-5:],
         "pending_feedback": [_act_brief(a) for a in pending],

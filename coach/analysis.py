@@ -454,10 +454,24 @@ def readiness_today(series: list[dict], session: dict | None, acwr: float | None
 
 # ---------- Gesamtzustand ----------
 
+WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
+def apply_moves(sessions: list[dict], moves: dict) -> list[dict]:
+    """Vom Athleten in der App verschobene Einheiten auf ihr neues Datum legen (id bleibt gleich)."""
+    out = []
+    for s in sessions:
+        new = moves.get(s["id"])
+        if new and new != s["date"]:
+            s = dict(s, date=new, weekday=WEEKDAYS[date.fromisoformat(new).weekday()], moved_from=s["date"])
+        out.append(s)
+    return sorted(out, key=lambda s: (s["date"], s["sport"] == "rest"))
+
+
 def build_state() -> dict:
     data = load_all()
     plan = data["plan"]
-    sessions = plan.get("sessions", [])
+    sessions = apply_moves(plan.get("sessions", []), userdata.values(data["user"], "moves"))
     today = date.today().isoformat()
     acts = [a for a in data["activities"] if sport_of(a["activityType"]["typeKey"]) != "other"]
     link = match_sessions(sessions, acts)

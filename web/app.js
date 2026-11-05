@@ -126,8 +126,82 @@ const currentWeek = () => {
 };
 const phaseOf = (id) => S.plan.phases.find((p) => p.id === id) || { name: "", color: "#666" };
 
+// ---------- Zustand vorbereiten ----------
+const localISO = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+/** Verschiebungen anwenden und Status nach dem Datum des Geräts berechnen (wichtig für die Online-Version). */
+function prepare() {
+  if (!S) return;
+  S.today = localISO();
+  S.plan.sessions.forEach((s) => {
+    if (!s.orig_date) s.orig_date = s.moved_from || s.date;
+    const mv = uval("moves", s.id);
+    s.date = mv || s.orig_date;
+    s.moved_from = s.date !== s.orig_date ? s.orig_date : null;
+    s.weekday = WD[toDate(s.date).getDay()];
+    s.status = s.sport === "rest" ? "rest" : (s.activity_ids || []).length ? "done"
+      : s.date < S.today ? "missed" : s.date === S.today ? "today" : "planned";
+  });
+  S.plan.sessions.sort((a, b) => a.date.localeCompare(b.date) || (a.sport === "rest") - (b.sport === "rest"));
+}
+
+// ----- Verschieben mit Regelprüfung -----
+const HARD_KINDS = ["vo2", "short", "threshold", "tempo", "progression", "hills", "test"];
+const isHard = (s) => s.sport === "run" && (s.key || HARD_KINDS.includes(s.kind));
+
+function moveOptions(s) {
+  const w = S.plan.weeks.find((x) => x.week === s.week);
+  const days = s.week === 0 ? sessions().filter((x) => x.week === 0).length : 7;
+  const others = sessions().filter((x) => x.id !== s.id && x.sport !== "rest");
+  const on = (day) => others.filter((x) => x.date === day);
+  return Array.from({ length: days }, (_, i) => {
+    const d = addDays(w.start, i);
+    const reasons = [];
+    let level = "ok";
+    if (d === s.date) level = "current";
+    else if (d < S.today) { level = "block"; reasons.push("liegt in der Vergangenheit"); }
+    else {
+      if (isHard(s)) {
+        const near = [addDays(d, -1), d, addDays(d, 1)].flatMap(on).filter(isHard);
+        if (near.length) { level = "block"; reasons.push(`zu nah an „${near[0].title}“ (${near[0].weekday}): nie zwei harte Tage hintereinander`); }
+        if (on(addDays(d, -1)).some((x) => x.sport === "strength")) reasons.push("Kraft am Vortag, die Beine sind evtl. müde");
+        if (on(addDays(d, 1)).some((x) => x.kind === "long")) reasons.push("Tag vor dem langen Lauf");
+      }
+      if (s.kind === "long") {
+        const near = [addDays(d, -1), addDays(d, 1)].flatMap(on).filter(isHard);
+        if (near.length) reasons.push(`direkt neben „${near[0].title}“`);
+      }
+      const same = on(d);
+      if (same.length) reasons.push(`Doppeltag mit „${same[0].title}“`);
+      if (level === "ok" && reasons.length) level = "warn";
+    }
+    return { d, level, reasons };
+  });
+}
+
+function moveSection(s) {
+  if (s.sport === "rest" || !["planned", "today"].includes(s.status)) return "";
+  const opts = moveOptions(s);
+  const ico = { ok: "✓", warn: "!", block: "✕", current: "●" };
+  return `<details class="more"><summary>↔ Verschieben${s.moved_from ? ` <span class="chip adj" style="margin-left:6px">verschoben von ${fmtDate(s.moved_from)}</span>` : ""}</summary>
+    <div class="move-list">${opts.map((o) => `<button class="move-opt ${o.level}" ${o.level === "block" || o.level === "current" ? "disabled" : ""} data-move="${s.id}|${o.d}">
+      <span class="ico ${o.level === "ok" ? "ok" : o.level === "warn" ? "warn" : o.level === "block" ? "bad" : "info"}">${ico[o.level]}</span>
+      <b>${fmtDate(o.d)}</b><span class="t2">${o.level === "current" ? "aktueller Tag" : o.reasons.length ? esc(o.reasons.join(" · ")) : "passt"}</span></button>`).join("")}</div>
+    ${s.moved_from ? `<button class="chip" style="margin-top:8px" data-move="${s.id}|reset">Zurück auf ${fmtDate(s.moved_from)}</button>` : ""}
+  </details>`;
+}
+
+function tomorrowButton(s) {
+  if (s.status !== "today" || s.sport === "rest") return "";
+  const o = moveOptions(s).find((x) => x.d === addDays(s.date, 1));
+  if (!o || o.level === "block") return "";
+  return `<button class="chip" data-move="${s.id}|${o.d}" title="${esc(o.reasons.join(" · "))}">Auf morgen ${o.level === "warn" ? "(!)" : ""}</button>`;
+}
+
 // ---------- Render ----------
 function render() {
+  prepare();
   $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   const el = $("#view");
   ({ heute: renderToday, woche: renderWeek, plan: renderPlan, aktivitaeten: renderActivities, fortschritt: renderProgress }[view] || renderToday)(el);
@@ -143,6 +217,13 @@ function bindCommon(root) {
     uset("on_watch", id, uval("on_watch", id) ? null : true);
   }));
   bindNoteForms(root);
+  $$("[data-move]", root).forEach((n) => n.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [id, d] = n.dataset.move.split("|");
+    const s = sessionById(id);
+    uset("moves", id, d === "reset" ? null : d);
+    toast(d === "reset" ? "Zurück auf den ursprünglichen Tag." : `„${s.title}“ liegt jetzt am ${fmtDate(d)}.`);
+  }));
   $$("[data-copy]", root).forEach((n) => n.addEventListener("click", async (e) => {
     e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(n.dataset.copy); toast("Name kopiert."); } catch (_) { toast(n.dataset.copy); }
@@ -204,7 +285,8 @@ function watchReminder() {
 }
 
 function weekStrip(wk) {
-  const ss = sessions().filter((s) => s.week === wk);
+  const all = sessions().filter((s) => s.week === wk);
+  const ss = all.filter((s) => s.sport !== "rest" || !all.some((x) => x.date === s.date && x.sport !== "rest"));
   const w = S.plan.weeks.find((x) => x.week === wk);
   const pct = w.sessions_due ? Math.round((100 * w.sessions_done) / w.sessions_due) : 0;
   return `<div class="card">
@@ -316,14 +398,16 @@ function sessionCard(s, opt = {}) {
         ${s.key ? `<span class="chip key">★ Schlüsseleinheit</span>` : ""}
         <span class="chip"><span class="phase-dot" style="background:${phase.color}"></span>${esc(KIND[s.kind] || s.kind)}</span>
         ${s.adjusted ? `<span class="chip adj" title="${esc(s.adjusted.reason || "")}">angepasst</span>` : ""}
+        ${s.moved_from ? `<span class="chip adj">verschoben von ${esc(WD[toDate(s.moved_from).getDay()])}</span>` : ""}
       </div>
-      <span class="status ${s.status}">${STATUS_TXT[s.status] || ""}</span>
+      <div class="row" style="gap:8px">${opt.hero ? tomorrowButton(s) : ""}<span class="status ${s.status}">${STATUS_TXT[s.status] || ""}</span></div>
     </div>
     <div class="workout-title">${SPORT_ICO[s.sport]} ${esc(s.title)}</div>
     ${s.sport !== "rest" ? `<div class="meta"><span><b>${fmtMin(s.duration_min)}</b>${dist}</span>${s.steps && s.steps[0] && s.steps[0].hr ? `<span>Ziel: <b>${esc(mainTarget(s))}</b></span>` : ""}</div>` : ""}
     ${s.adjusted ? `<div class="advice yellow" style="margin-top:12px"><b>Angepasst:</b> ${esc(s.adjusted.reason || "")}</div>` : ""}
     ${acts.length ? `<div style="margin-top:14px" class="stack">${acts.map((a) => activityMini(a)).join("")}</div>` : ""}
     ${acts.length && !opt.expand ? `<details class="more"><summary>Geplante Einheit anzeigen</summary>${body}</details>` : body}
+    ${opt.expand || opt.hero ? moveSection(s) : ""}
   </div>`;
 }
 
@@ -434,13 +518,15 @@ function renderWeek(el) {
   if (weekSel === null) weekSel = currentWeek();
   const weeks = S.plan.weeks;
   const w = weeks.find((x) => x.week === weekSel) || weeks[0];
-  const ss = sessions().filter((s) => s.week === w.week);
+  const all = sessions().filter((s) => s.week === w.week);
+  // Ruhetag ausblenden, wenn an dem Tag (durch Verschieben) etwas anderes liegt
+  const ss = all.filter((s) => s.sport !== "rest" || !all.some((x) => x.date === s.date && x.sport !== "rest"));
   const phase = phaseOf(w.phase);
-  const end = addDays(ss[0].date, ss.length - 1);
+  const end = addDays(w.start, w.week === 0 ? all.length - 1 : 6);
   el.innerHTML = `
     <div class="page-head row between wrap">
       <div><h2>Woche ${w.week}${w.deload ? " · Entlastung" : ""}</h2>
-        <p>${fmtDate(ss[0].date)} – ${fmtDate(end)} · <span class="phase-dot" style="background:${phase.color}"></span> ${esc(phase.name)} · ${esc(w.focus)}</p></div>
+        <p>${fmtDate(w.start)} – ${fmtDate(end)} · <span class="phase-dot" style="background:${phase.color}"></span> ${esc(phase.name)} · ${esc(w.focus)}</p></div>
       <div class="week-nav">
         <button class="icon-btn" id="wPrev" ${w.week <= weeks[0].week ? "disabled" : ""} aria-label="Vorige Woche">‹</button>
         <button class="chip" id="wNow">Aktuell</button>
@@ -455,7 +541,7 @@ function renderWeek(el) {
     <div class="stack" style="gap:10px">
       ${ss.map((s) => `<div class="card tight day clickable ${s.date === S.today ? "is-today" : ""} ${s.sport === "rest" ? "rest" : ""}" data-session="${s.id}">
         <div class="dow">${s.weekday}<small>${fmtDM(s.date)}</small></div>
-        <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)} ${s.key ? `<span class="chip key" style="margin-left:4px">★</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:4px">angepasst</span>` : ""}${needsWatch(s) && s.status !== "done" && s.status !== "missed" ? (uval("on_watch", s.id) ? `<span class="chip watch-chip on" style="margin-left:4px" title="Auf der Uhr">⌚ ✓</span>` : `<span class="chip watch-chip" style="margin-left:4px" title="Noch nicht auf der Uhr">⌚ fehlt</span>`) : ""}</div>
+        <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)} ${s.key ? `<span class="chip key" style="margin-left:4px">★</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:4px">angepasst</span>` : ""}${s.moved_from ? `<span class="chip adj" style="margin-left:4px">verschoben</span>` : ""}${needsWatch(s) && s.status !== "done" && s.status !== "missed" ? (uval("on_watch", s.id) ? `<span class="chip watch-chip on" style="margin-left:4px" title="Auf der Uhr">⌚ ✓</span>` : `<span class="chip watch-chip" style="margin-left:4px" title="Noch nicht auf der Uhr">⌚ fehlt</span>`) : ""}</div>
           <div class="day-sub">${s.sport === "rest" ? esc(s.tips[0] || "") : `${fmtMin(s.duration_min)}${s.distance_km ? ` · ~${s.distance_km} km` : ""} · ${esc(mainTarget(s) || KIND[s.kind])}`}</div>
           ${(s.activity_ids || []).map((id) => { const a = actById(id); return a ? `<div class="day-sub" style="margin-top:4px;color:var(--text)" data-act="${a.id}">↳ ${esc(a.name)} · ${actStats(a).replace(/<[^>]+>/g, " ")} <span class="rating ${a.analysis.rating}" style="margin-left:6px">${a.analysis.rating}</span></div>` : ""; }).join("")}
         </div>
