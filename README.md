@@ -20,6 +20,8 @@ gleicht jede Einheit mit einem 12-Wochen-Plan zur **VO2max-Steigerung** ab und z
   - ob der geplante Reiz erreicht wurde, mit Bewertung
 - **Coach-Feedback:** Claude schreibt zu jeder Einheit ein persönliches Feedback und passt den Plan an (siehe unten).
 - **Fortschritt:** VO2max-Verlauf pro Lauf, Intensitätsverteilung, HRV mit Normalbereich, Ruhepuls und Schlaf.
+- **Als App aufs Handy:** Die Seite ist eine PWA. Im Browser „Zum Startbildschirm hinzufügen“ wählen, dann startet sie
+  mit eigenem Icon im Vollbild und zeigt den letzten Stand auch offline. Das braucht HTTPS, z. B. über Netlify.
 
 Alle Daten bleiben lokal. Persönliches (`athlete.json`, `data/`, `feedback/`, `plan/`) ist per `.gitignore` vom Repo ausgeschlossen.
 

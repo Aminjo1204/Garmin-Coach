@@ -671,4 +671,7 @@ $$("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 let rT;
 window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => S && render(), 200); });
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 load();

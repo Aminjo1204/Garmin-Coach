@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import threading
 
@@ -10,6 +11,9 @@ from flask import Flask, jsonify, send_from_directory
 from coach.analysis import activity_detail, build_state
 from coach.config import ROOT
 from coach.sync import sync
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("text/javascript", ".js")
 
 app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 _sync_lock = threading.Lock()
