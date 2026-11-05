@@ -62,7 +62,7 @@ async function uset(kind, key, value) {
 
 function refresh() {
   render();
-  if (!$("#modal").hidden && modalRefresh) modalRefresh();
+  if (modalOpen() && modalRefresh) redrawModal(modalRefresh);
 }
 
 async function load() {
@@ -213,6 +213,7 @@ function tomorrowButton(s) {
 // ---------- Render ----------
 function render() {
   prepare();
+  $("#backBtn").hidden = !((history.state && history.state.depth) > 0);
   $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   const el = $("#view");
   ({ heute: renderToday, woche: renderWeek, plan: renderPlan, aktivitaeten: renderActivities, fortschritt: renderProgress }[view] || renderToday)(el);
@@ -282,7 +283,7 @@ function renderToday(el) {
         ${week ? weekStrip(wk) : ""}
       </div>
     </div>`;
-  $$("[data-view-link]", el).forEach((b) => b.addEventListener("click", () => setView(b.dataset.viewLink)));
+  $$("[data-view-link]", el).forEach((b) => b.addEventListener("click", () => setView(b.dataset.viewLink, { drill: true })));
 }
 
 function watchReminder() {
@@ -631,9 +632,10 @@ function renderWeek(el) {
         <span class="status ${s.status}">${STATUS_TXT[s.status]}</span>
       </div>`).join("")}
     </div>`;
-  $("#wPrev", el).onclick = () => { weekSel--; render(); };
-  $("#wNext", el).onclick = () => { weekSel++; render(); };
-  $("#wNow", el).onclick = () => { weekSel = currentWeek(); render(); };
+  const goWeek = (n) => { weekSel = n; history.replaceState({ ...(history.state || {}), week: n }, ""); render(); };
+  $("#wPrev", el).onclick = () => goWeek(weekSel - 1);
+  $("#wNext", el).onclick = () => goWeek(weekSel + 1);
+  $("#wNow", el).onclick = () => goWeek(currentWeek());
 }
 
 // ----- Plan -----
@@ -670,7 +672,7 @@ function renderPlan(el) {
         </div>`;
       }).join("")}
     </div>`;
-  $$("[data-week]", el).forEach((n) => n.addEventListener("click", () => { weekSel = +n.dataset.week; setView("woche"); }));
+  $$("[data-week]", el).forEach((n) => n.addEventListener("click", () => { weekSel = +n.dataset.week; setView("woche", { drill: true }); }));
   barChart($("#volChart", el), weeks.map((w) => ({ label: `W${w.week}`, a: w.run_km, b: w.week <= cur ? w.done_run_km : null })),
     { aName: "Geplant", bName: "Gelaufen", unit: "km" });
 }
@@ -768,8 +770,8 @@ function bindNoteForms(root) {
       toast("Danke! Ich schau's mir beim nächsten Check an.");
     });
   });
-  $$("[data-note-edit]", root).forEach((b) => b.addEventListener("click", () => openActivity(+b.dataset.noteEdit, { editNote: true })));
-  $$("[data-note-cancel]", root).forEach((b) => b.addEventListener("click", () => openActivity(+b.dataset.noteCancel)));
+  $$("[data-note-edit]", root).forEach((b) => b.addEventListener("click", () => redrawModal(() => openActivity(+b.dataset.noteEdit, { editNote: true }))));
+  $$("[data-note-cancel]", root).forEach((b) => b.addEventListener("click", () => redrawModal(() => openActivity(+b.dataset.noteCancel))));
   $$("[data-quickfeel]", root).forEach((b) => b.addEventListener("click", (e) => {
     e.stopPropagation();
     const [id, v] = b.dataset.quickfeel.split(":");
@@ -792,10 +794,9 @@ function feelPrompt() {
 async function openActivity(id, opts = {}) {
   const a = actById(id);
   if (!a) return;
-  modalRefresh = () => openActivity(id);
   const an = a.analysis, m = an.metrics;
   const s = a.session_id ? sessionById(a.session_id) : null;
-  openModal(`
+  showModal(`
     <div class="label">${fmtDateLong(a.date)} · ${a.start.slice(11, 16)} Uhr${s ? " · geplant: " + esc(s.title) : ""}</div>
     <div class="row between wrap" style="margin-top:6px"><h2>${SPORT_ICO[m.sport]} ${esc(a.name)}</h2>
       <span class="rating ${an.score !== null ? an.rating : "muted"}">${esc(an.rating)}${an.score !== null ? " · " + an.score + "/100" : ""}</span></div>
@@ -814,7 +815,7 @@ async function openActivity(id, opts = {}) {
     ${m.reps ? `<h3 style="margin-top:20px">Wiederholungen</h3><table class="laps"><tr><th>#</th><th>Dauer</th><th>Pace</th><th>Ø HF</th><th>Max HF</th></tr>
       ${m.reps.map((r) => `<tr><td>${r.n}</td><td>${fmtStepMin(r.sec / 60)}</td><td>${r.pace || "–"}</td><td>${r.avg_hr ?? "–"}</td><td>${r.max_hr ?? "–"}</td></tr>`).join("")}</table>` : ""}
     <div id="lapsWrap"></div>
-  `);
+  `, () => openActivity(id));
   try {
     const r = await fetch(`/api/activity/${id}`);
     if (!r.ok) return;
@@ -840,22 +841,63 @@ const stat = (k, v) => `<div class="stat"><div class="v num">${esc(v)}</div><div
 function openSession(id, openSheet = false) {
   const s = sessionById(id);
   if (!s) return;
-  openModal(sessionCard(s, { expand: true, openSheet }).replace('class="card"', 'class=""'));
-  modalRefresh = () => openSession(id, true);
+  showModal(sessionCard(s, { expand: true, openSheet }).replace('class="card"', 'class=""'), () => openSession(id, true));
 }
 
-function openModal(html) {
+// ----- Detailfenster mit Verlauf (Zurück-Knopf, Wischgeste, Android-Zurück) -----
+let modalStack = [];       // vorherige Inhalte, falls aus einem Fenster ein weiteres geöffnet wurde
+let modalReplacing = false;
+const modalOpen = () => !$("#modal").hidden;
+
+function showModal(html, reopen) {
+  if (!modalReplacing) {
+    if (modalOpen() && modalRefresh) modalStack.push(modalRefresh);
+    history.pushState({ modal: true, view, week: weekSel, depth: (history.state && history.state.depth) || 0 }, "");
+  }
+  modalRefresh = reopen;
+  const scroll = modalReplacing ? $(".modal-card").scrollTop : 0;
   $("#modalBody").innerHTML = html;
   $("#modal").hidden = false;
+  $(".modal-card").scrollTop = scroll;
   document.body.style.overflow = "hidden";
   bindCommon($("#modalBody"));
 }
-function closeModal() {
+
+/** Inhalt neu zeichnen, ohne einen Verlaufseintrag anzulegen (z. B. nach dem Speichern). */
+function redrawModal(fn) {
+  modalReplacing = true;
+  try { fn(); } finally { modalReplacing = false; }
+}
+
+function hideModal() {
   modalRefresh = null;
+  modalStack = [];
   $("#modal").hidden = true;
   document.body.style.overflow = "";
   hideTip();
 }
+
+/** Alle Fenster-Ebenen schließen und den Verlauf entsprechend zurückspulen. */
+function closeModal() {
+  if (!modalOpen()) return;
+  const n = modalStack.length + 1;
+  hideModal();
+  history.go(-n);
+}
+
+window.addEventListener("popstate", (e) => {
+  if (modalOpen()) {
+    if (modalStack.length) redrawModal(modalStack.pop());
+    else hideModal();
+    return;
+  }
+  const st = e.state || {};
+  view = st.view || "heute";
+  if (st.week !== undefined && st.week !== null) weekSel = st.week;
+  try { localStorage.setItem("view", view); } catch (_) {}
+  window.scrollTo(0, 0);
+  render();
+});
 
 // ----- Fortschritt -----
 function renderProgress(el) {
@@ -1065,18 +1107,30 @@ function niceTicks(lo, hi, n) {
 }
 
 // ---------- Navigation ----------
-function setView(v) {
+/** Ansicht wechseln. drill = Unterseite (z. B. Plan → Woche): dann erscheint oben ein Zurück-Pfeil. */
+function setView(v, opts = {}) {
+  const wasModal = modalOpen();
+  if (wasModal) hideModal();
   view = v;
   try { localStorage.setItem("view", v); } catch (_) {}
-  closeModal();
+  const depth = opts.drill ? ((history.state && history.state.depth) || 0) + 1 : 0;
+  const st = { view: v, week: weekSel, depth };
+  if (wasModal) history.replaceState(st, "", "#" + v);
+  else history.pushState(st, "", "#" + v);
   window.scrollTo(0, 0);
   render();
 }
 
+const VIEWS = ["heute", "woche", "plan", "aktivitaeten", "fortschritt"];
+if (VIEWS.includes(location.hash.slice(1))) view = location.hash.slice(1);
+history.replaceState({ view, week: null, depth: 0 }, "", "#" + view);
+
 $$("#tabs button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 $("#syncBtn").addEventListener("click", () => doSync(false));
+$("#backBtn").addEventListener("click", () => history.back());
+$("#modalBack").addEventListener("click", () => history.back());
 $$("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalOpen()) history.back(); });
 let rT;
 window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => S && render(), 200); });
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
