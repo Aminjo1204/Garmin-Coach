@@ -41,7 +41,12 @@ python -m coach.netlify setup
 
 Wird die Adresse nicht automatisch gefunden: `python -m coach.netlify setup --url https://mein-coach.netlify.app`
 
-**5. Erster Upload:**
+**5. Netlifys eigenen Seitenschutz auf Vorschauen beschränken.** Bei neuen Projekten ist oft „Private“ für alles
+voreingestellt. Dann sperrt Netlifys Team-Login auch den Abgleich vom PC aus. In app.netlify.com → Projekt →
+Project configuration → Access & security → Visitor access die Option „Applies to“ auf **„Previews only“** stellen.
+Die Produktivseite schützt danach das Passwort aus Schritt 3.
+
+**6. Erster Upload:**
 
 ```bash
 python -m coach.netlify deploy
@@ -49,7 +54,7 @@ python -m coach.netlify deploy
 
 Unter Windows jeweils `.venv\Scripts\python.exe` statt `python` verwenden.
 
-**6. Am Handy:** die Adresse öffnen, einloggen und im Browser-Menü „Zum Startbildschirm hinzufügen“ wählen.
+**7. Am Handy:** die Adresse öffnen, einloggen und im Browser-Menü „Zum Startbildschirm hinzufügen“ wählen.
 
 ## Danach
 
