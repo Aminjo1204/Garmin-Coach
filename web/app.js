@@ -18,7 +18,7 @@ const ZONE_NAMES = ["Regeneration", "Grundlage", "Tempo", "Schwelle", "VO2max"];
 const zc = (z) => `var(--z${z || 1})`;
 const KIND = {
   vo2: "VO2max", short: "VO2max kurz", threshold: "Schwelle", tempo: "Tempo", progression: "Progression", hills: "Berg",
-  easy: "Locker", long: "Lang", test: "Test", bike_z2: "Rad", strength: "Kraft", rest: "Ruhe", extra: "Zusatz", pre: "Vor Plan",
+  easy: "Locker", long: "Lang", test: "Test", race: "Wettkampf", bike_z2: "Rad", strength: "Kraft", rest: "Ruhe", extra: "Zusatz", pre: "Vor Plan",
 };
 const SPORT_ICO = { run: "🏃", bike: "🚴", strength: "🏋️", rest: "😴", other: "•" };
 const STATUS_TXT = { done: "Erledigt", missed: "Verpasst", today: "Heute", planned: "Geplant", rest: "Ruhe" };
@@ -73,19 +73,21 @@ async function load() {
     $("#view").innerHTML = `<div class="card">Server nicht erreichbar. Läuft <code>app.py</code>?</div>`;
     return;
   }
+  if (S.setup_needed) {
+    view = "setup";
+    history.replaceState({ view, week: null, depth: 0 }, "", "#setup");
+  } else if (view === "setup" && !(history.state && history.state.depth)) {
+    view = "heute"; // Fragebogen nach Neuladen nicht ungewollt offen lassen
+    history.replaceState({ view, week: null, depth: 0 }, "", "#heute");
+  }
   render();
   updateSyncLabel();
   loadWeather();
-  if (S.static) return; // Online-Version: Daten kommen vom PC (Coach-Check)
   const last = S.sync && S.sync.last_sync ? new Date(S.sync.last_sync) : null;
   if (!last || Date.now() - last.getTime() > 30 * 60 * 1000) doSync(true);
 }
 
 async function doSync(auto = false) {
-  if (S && S.static) {
-    toast("Online-Version: Neue Daten und Coach-Feedback kommen automatisch vom PC (2× täglich).");
-    return;
-  }
   const btn = $("#syncBtn");
   if (btn.classList.contains("busy")) return;
   btn.classList.add("busy");
@@ -95,6 +97,7 @@ async function doSync(auto = false) {
     if (r.status === 409) { toast("Sync läuft bereits."); return; }
     const j = await r.json();
     S = j.state;
+    if (view === "setup") SETUP.sugg = null; // neue Garmin-Daten → Vorschläge neu laden
     render();
     const n = (j.sync.new_fit || []).length;
     if (!j.sync.ok) toast("Sync mit Fehlern: " + (j.sync.errors || []).join("; ").slice(0, 160));
@@ -108,11 +111,6 @@ async function doSync(auto = false) {
 }
 
 function updateSyncLabel() {
-  if (S && S.static) {
-    const d = new Date(S.exported || S.generated);
-    $("#syncLabel").textContent = `Stand ${d.toLocaleDateString("de-AT", { day: "numeric", month: "numeric" })} ${d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}`;
-    return;
-  }
   const t = S && S.sync && S.sync.last_sync;
   $("#syncLabel").textContent = t ? `Sync ${new Date(t).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}` : "Sync";
 }
@@ -141,7 +139,7 @@ const phaseOf = (id) => S.plan.phases.find((p) => p.id === id) || { name: "", co
 const localISO = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
-/** Verschiebungen anwenden und Status nach dem Datum des Geräts berechnen (wichtig für die Online-Version). */
+/** Verschiebungen anwenden und Status nach dem Datum des Geräts berechnen. */
 function prepare() {
   if (!S) return;
   S.today = localISO();
@@ -158,7 +156,7 @@ function prepare() {
 }
 
 // ----- Verschieben mit Regelprüfung -----
-const HARD_KINDS = ["vo2", "short", "threshold", "tempo", "progression", "hills", "test"];
+const HARD_KINDS = ["vo2", "short", "threshold", "tempo", "progression", "hills", "test", "race"];
 const isHard = (s) => s.sport === "run" && (s.key || HARD_KINDS.includes(s.kind));
 
 function moveOptions(s) {
@@ -212,11 +210,14 @@ function tomorrowButton(s) {
 
 // ---------- Render ----------
 function render() {
+  if (S.setup_needed) view = "setup";
   prepare();
-  $("#backBtn").hidden = !((history.state && history.state.depth) > 0);
+  document.body.classList.toggle("setup-mode", view === "setup");
+  $("#backBtn").hidden = S.setup_needed || !((history.state && history.state.depth) > 0);
   $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   const el = $("#view");
-  ({ heute: renderToday, woche: renderWeek, plan: renderPlan, aktivitaeten: renderActivities, fortschritt: renderProgress }[view] || renderToday)(el);
+  ({ heute: renderToday, woche: renderWeek, plan: renderPlan, aktivitaeten: renderActivities, fortschritt: renderProgress,
+     setup: renderSetup }[view] || renderToday)(el);
   bindCommon(el);
 }
 
@@ -666,13 +667,13 @@ function renderPlan(el) {
   const cur = currentWeek();
   const phases = S.plan.phases;
   el.innerHTML = `
-    <div class="page-head"><h2>Dein Plan</h2><p>${esc(S.goal)} · 12 Wochen ab ${fmtDate(S.plan.start)}</p></div>
+    <div class="page-head"><h2>Dein Plan</h2><p>${esc(S.goal)} · ${weeks.filter((w) => w.week > 0).length} Wochen ab ${fmtDate(S.plan.start)}</p></div>
     <div class="card">
       <div class="phase-bar" style="margin-top:0">${weeks.map((w) => `<span style="flex:1;background:${phaseOf(w.phase).color};opacity:${w.week < cur ? 0.45 : 1}" title="W${w.week}"></span>`).join("")}</div>
       <div class="row wrap" style="gap:6px;margin-top:10px">${phases.filter((p) => p.id !== "intro").map((p) => `<span class="chip"><span class="phase-dot" style="background:${p.color}"></span>${esc(p.name)} · W${p.weeks[0]}–${p.weeks[p.weeks.length - 1]}</span>`).join("")}</div>
       <details class="more"><summary>Wie der Plan aufgebaut ist</summary>
         <div class="stack" style="gap:10px;margin-top:10px">${phases.filter((p) => p.id !== "intro").map((p) => `<div><b>${esc(p.name)}</b><p class="t2" style="font-size:13.5px;margin-top:2px">${esc(p.goal)}</p></div>`).join("")}
-          <div><b>Wochenrhythmus</b><p class="t2" style="font-size:13.5px;margin-top:2px">Mo Kraft · Di Ruhe · <b style="color:var(--text)">Mi VO2max</b> · Do Rad · <b style="color:var(--text)">Fr Schwelle</b> · Sa Ruhe · <b style="color:var(--text)">So Langer Lauf</b>. Tage tauschen ist okay, zwischen zwei harten Einheiten mindestens 48 h.</p></div>
+          <div><b>Wochenrhythmus</b><p class="t2" style="font-size:13.5px;margin-top:2px">${(S.plan.rhythm || [{ day: "Mo", name: "Kraft" }, { day: "Di", name: "Ruhe" }, { day: "Mi", name: "VO2max", key: true }, { day: "Do", name: "Rad" }, { day: "Fr", name: "Schwelle", key: true }, { day: "Sa", name: "Ruhe" }, { day: "So", name: "Langer Lauf", key: true }]).map((r) => r.key ? `<b style="color:var(--text)">${r.day} ${esc(r.name)}</b>` : `${r.day} ${esc(r.name)}`).join(" · ")}. Tage tauschen ist okay, zwischen zwei harten Einheiten mindestens 48 h.</p></div>
           <div><b>Deine Zonen</b><p class="t2" style="font-size:13.5px;margin-top:2px">Aus deinen Daten abgeleitet (HFmax ≈ ${S.athlete.hr_max}, Schwelle ≈ ${S.athlete.lthr} bpm). Am besten auch auf der Uhr eintragen. Rad etwa 10 bpm tiefer.</p>${zoneLegend("run")}</div>
         </div>
       </details>
@@ -691,7 +692,14 @@ function renderPlan(el) {
     <div class="card" style="margin-top:16px">
       <h3>Laufumfang pro Woche</h3>
       <div id="volChart" class="chart" style="margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="row between wrap" style="gap:12px">
+        <div style="min-width:0;flex:1"><h3>Neues Ziel?</h3><p class="t2" style="font-size:13.5px;margin-top:4px">Beantworte ein paar Fragen und bekomme einen neuen Plan, z. B. für 5 km, 10 km oder Halbmarathon. Der aktuelle Plan wird vorher gesichert.</p></div>
+        <button class="btn-ghost" id="newPlanBtn">Neuen Plan erstellen</button>
+      </div>
     </div>`;
+  $("#newPlanBtn", el).onclick = () => { SETUP.step = 0; SETUP.error = ""; setView("setup", { drill: true }); };
   $$("[data-week]", el).forEach((n) => n.addEventListener("click", () => { weekSel = +n.dataset.week; setView("woche", { drill: true }); }));
   barChart($("#volChart", el), weeks.map((w) => ({ label: `W${w.week}`, a: w.run_km, b: w.week <= cur ? w.done_run_km : null })),
     { aName: "Geplant", bName: "Gelaufen", unit: "km" });
@@ -923,15 +931,16 @@ window.addEventListener("popstate", (e) => {
 function renderProgress(el) {
   const vo2 = S.vo2;
   const lastVo2 = vo2.length ? vo2[vo2.length - 1].value : null;
+  const vo2Goal = S.athlete.vo2max_goal;
   const ser = S.readiness.series;
   const z = S.zone_4w;
   const zt = z.reduce((a, b) => a + b, 0) || 1;
   const zp = z.map((v) => Math.round((100 * v) / zt));
   const easy = zp[0] + zp[1];
   el.innerHTML = `
-    <div class="page-head"><h2>Fortschritt</h2><p>Ziel: VO2max ${S.athlete.vo2max_start} → ${S.athlete.vo2max_goal}</p></div>
+    <div class="page-head"><h2>Fortschritt</h2><p>Ziel: ${esc(S.goal || "")}</p></div>
     <div class="kpis">
-      <div class="card tight kpi"><div class="label">VO2max aktuell</div><div class="v num">${lastVo2 ?? "–"} <small>Ziel ${S.athlete.vo2max_goal}</small></div></div>
+      <div class="card tight kpi"><div class="label">VO2max aktuell</div><div class="v num">${lastVo2 ?? "–"} ${vo2Goal ? `<small>Ziel ${vo2Goal}</small>` : ""}</div></div>
       <div class="card tight kpi"><div class="label">Locker-Anteil (4 Wo.)</div><div class="v num">${easy} % <small>Ziel ≥ 75 %</small></div></div>
       <div class="card tight kpi"><div class="label">HRV 7-Tage-Ø</div><div class="v num">${lastVal(ser, "hrv_week") ?? "–"} <small>ms</small></div></div>
       <div class="card tight kpi"><div class="label">Ruhepuls</div><div class="v num">${lastVal(ser, "rhr") ?? "–"} <small>bpm</small></div></div>
@@ -953,8 +962,8 @@ function renderProgress(el) {
   if (vo2.length) {
     lineChart($("#vo2Chart", el), {
       series: [{ name: "VO2max", color: "var(--accent)", points: vo2.map((v) => [v.date, v.value]) }],
-      refLines: [{ y: S.athlete.vo2max_goal, label: `Ziel ${S.athlete.vo2max_goal}` }],
-      yMin: Math.floor(Math.min(...vo2.map((v) => v.value)) - 1), yMax: S.athlete.vo2max_goal + 0.5, yFmt: (v) => v.toFixed(1), height: 220, dots: true,
+      refLines: vo2Goal ? [{ y: vo2Goal, label: `Ziel ${vo2Goal}` }] : [],
+      yMin: Math.floor(Math.min(...vo2.map((v) => v.value)) - 1), yMax: Math.max(vo2Goal || 0, ...vo2.map((v) => v.value)) + 0.5, yFmt: (v) => v.toFixed(1), height: 220, dots: true,
     });
   } else $("#vo2Chart", el).innerHTML = `<p class="empty">Noch keine Werte.</p>`;
   const pt = (S.prediction && S.prediction.trend) || [];
@@ -1005,6 +1014,234 @@ function predictionCard(p) {
 }
 
 const lastVal = (ser, k) => { for (let i = ser.length - 1; i >= 0; i--) if (ser[i][k]) return ser[i][k]; return null; };
+
+// ----- Fragebogen: Ziel und Profil → neuer Plan (Backend: coach/setup.py) -----
+const SETUP = { step: 0, sugg: null, Q: null, busy: false, error: "", geo: null };
+const SETUP_STEPS = ["Ziel", "Über dich", "Dein Stand", "Puls", "Trainingswoche", "Abschluss"];
+const GOAL_INFO = {
+  vo2max: ["🫀", "VO2max steigern", "Mehr Sauerstoffaufnahme: fitter und schneller über alle Strecken. Intervalle in vielen Formen."],
+  "5k": ["⚡", "5 km schneller", "Tempo und Tempohärte für 5 km, auf Wunsch mit Wettkampftermin und Zielzeit."],
+  "10k": ["🏁", "10 km", "Schwelle und Renntempo für 10 km, lange Läufe bis gut 1,5 h."],
+  half: ["🛣️", "Halbmarathon", "Mehr Umfang, lange Läufe bis 2 h und Abschnitte im Halbmarathon-Tempo."],
+};
+const LEVELS = [[0, "unter 15 km"], [1, "15–25 km"], [2, "25–40 km"], [3, "über 40 km"]];
+const PATTERNS = { 3: ["S", "R", "Q1", "B", "Q2", "R", "L"], 4: ["S", "E", "Q1", "B", "Q2", "R", "L"], 5: ["S", "E", "Q1", "E", "Q2", "R", "L"] };
+const TIME_RE = /^(\d{1,2}:)?\d{1,2}:\d\d$/;
+
+function setupDefaults(sg) {
+  const p = sg.profile || {}, t = p.training || {}, s = sg.suggest || {};
+  return {
+    goal: t.goal || null, race_date: t.race_date || "", goal_time: t.goal_time || "",
+    name: p.name || "", age: p.age || "", weight_kg: p.weight_kg || "", height_cm: p.height_cm || "",
+    five_k: p.five_k || "", level: t.level ?? s.level ?? null,
+    vo2max: s.vo2max ?? p.vo2max_start ?? "", vo2max_goal: p.vo2max_goal || "",
+    hr_max: p.hr_max || "", hr_rest: p.hr_rest || s.hr_rest || "", lthr: p.lthr || "",
+    run_days: t.run_days || 3, long_day: t.long_day || "So", strength: t.strength ?? true, bike: t.bike ?? true,
+    start: sg.next_monday, location: p.location || null, training_hour: p.training_hour ?? 18, coach_context: p.coach_context || "",
+  };
+}
+
+/** Plan-Länge wie im Backend (plan_window): mit Wettkampf endet der Plan in der Wettkampfwoche. */
+function setupWeeks(Q) {
+  if (Q.goal === "vo2max" || !Q.race_date) return { n: 12 };
+  const race = toDate(Q.race_date), monday = new Date(race);
+  monday.setDate(race.getDate() - ((race.getDay() + 6) % 7));
+  const n = Math.round((monday - toDate(Q.start)) / (7 * 864e5)) + 1;
+  return { n, short: n < SETUP.sugg.min_weeks, long: n > SETUP.sugg.max_weeks };
+}
+
+function setupStepError(i) {
+  const Q = SETUP.Q;
+  if (i === 0) {
+    if (!Q.goal) return "Bitte wähle ein Ziel.";
+    if (Q.race_date && Q.goal !== "vo2max") {
+      if (Q.race_date <= S.today) return "Der Wettkampf muss in der Zukunft liegen.";
+      if (setupWeeks(Q).short) return `Bis zum Wettkampf sind es weniger als ${SETUP.sugg.min_weeks} Wochen.`;
+    }
+    if (Q.goal_time && !TIME_RE.test(Q.goal_time.trim())) return "Zielzeit bitte als mm:ss oder h:mm:ss.";
+  }
+  if (i === 1) {
+    if (!Q.name.trim()) return "Wie heißt du?";
+    if (!(+Q.age >= 14 && +Q.age <= 90)) return "Bitte ein Alter zwischen 14 und 90 angeben.";
+  }
+  if (i === 2) {
+    if (!TIME_RE.test(String(Q.five_k).trim())) return "Bitte deine 5-km-Zeit als mm:ss angeben (Schätzung reicht).";
+    if (Q.level === null) return "Wie viel läufst du aktuell pro Woche?";
+    if (Q.goal === "vo2max" && !Q.vo2max) return "Für das Ziel VO2max brauche ich deinen aktuellen Garmin-VO2max.";
+  }
+  return "";
+}
+
+const fld = (name, label, attrs = "", hint = "") => `<div class="field"><label for="q_${name}">${label}</label>
+  <input id="q_${name}" data-q="${name}" value="${esc(SETUP.Q[name] ?? "")}" ${attrs}>${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
+const qseg = (field, opts) => `<div class="seg" data-qseg="${field}">${opts.map(([v, l]) => `<button type="button" data-v='${JSON.stringify(v)}' class="${SETUP.Q[field] === v ? "on" : ""}">${l}</button>`).join("")}</div>`;
+
+function setupRhythm(Q) {
+  const names = { S: "Kraft", R: "Ruhe", E: "Locker", B: "Rad", L: "Lang", Q1: Q.goal === "vo2max" ? "VO2max" : "Intervalle", Q2: Q.goal === "vo2max" || Q.goal === "5k" ? "Schwelle" : "Tempo" };
+  let p = PATTERNS[Q.run_days].map((c) => ((c === "S" && !Q.strength) || (c === "B" && !Q.bike) ? "R" : c));
+  if (Q.long_day === "Sa") p = p.slice(1).concat(p.slice(0, 1));
+  return `<div class="rhythm">${p.map((c, i) => `<div class="${["Q1", "Q2", "L"].includes(c) ? "key" : c === "R" ? "off" : ""}"><small>${["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"][i]}</small>${names[c]}</div>`).join("")}</div>`;
+}
+
+function setupStep(i) {
+  const Q = SETUP.Q, sg = SETUP.sugg, s = sg.suggest || {};
+  if (i === 0) {
+    const w = setupWeeks(Q);
+    return `<h3>Was willst du erreichen?</h3>
+      <div class="goal-grid">${Object.entries(GOAL_INFO).map(([k, [ico, t, d]]) => `<button type="button" class="goal-card ${Q.goal === k ? "on" : ""}" data-goal="${k}">
+        <span class="goal-ico">${ico}</span><b>${t}</b><span>${d}</span></button>`).join("")}</div>
+      ${Q.goal && Q.goal !== "vo2max" ? `<div class="su-grid" style="margin-top:16px">
+        ${fld("race_date", "Wettkampftag (optional)", `type="date" min="${S.today}"`, Q.race_date ? (w.short ? `Zu knapp: mindestens ${sg.min_weeks} Wochen nötig.` : w.long ? `Der Plan dauert höchstens ${sg.max_weeks} Wochen und startet dann später.` : `Der Plan dauert ${w.n} Wochen und endet mit dem Wettkampf.`) : "Ohne Termin: 12 Wochen mit Abschluss-Wettkampf oder Test.")}
+        ${fld("goal_time", "Zielzeit (optional)", `placeholder="${Q.goal === "half" ? "1:55:00" : Q.goal === "10k" ? "50:00" : "24:00"}" inputmode="numeric"`, "Hilft dem Coach bei der Einordnung.")}
+      </div>` : ""}`;
+  }
+  if (i === 1) {
+    return `<h3>Über dich</h3><div class="su-grid">
+      ${fld("name", "Name", `autocomplete="given-name"`)}${fld("age", "Alter", `type="number" inputmode="numeric" min="14" max="90"`)}
+      ${fld("weight_kg", "Gewicht in kg (optional)", `type="number" inputmode="numeric"`)}${fld("height_cm", "Größe in cm (optional)", `type="number" inputmode="numeric"`)}
+    </div>`;
+  }
+  if (i === 2) {
+    return `<h3>Dein aktueller Stand</h3>
+      ${fld("five_k", "Aktuelle 5-km-Zeit", `placeholder="25:30" inputmode="numeric"`, "Eine Schätzung reicht, z. B. dein letzter flotter 5-km-Lauf. Daraus berechne ich alle Pace-Vorgaben.")}
+      <div class="field" style="margin-top:14px"><label>Wie viel läufst du zurzeit pro Woche?</label>${qseg("level", LEVELS)}
+        ${s.km_week !== null && s.km_week !== undefined ? `<div class="hint">Laut Garmin in den letzten 4 Wochen: Ø ${String(s.km_week).replace(".", ",")} km pro Woche.</div>` : ""}</div>
+      <div class="su-grid" style="margin-top:14px">
+        ${fld("vo2max", `Aktueller VO2max (Garmin)${Q.goal === "vo2max" ? "" : " (optional)"}`, `type="number" step="0.1" inputmode="decimal"`, s.vo2max ? `Letzter Wert von deiner Uhr: ${String(s.vo2max).replace(".", ",")}` : "Steht in Garmin Connect unter Leistungswerte.")}
+        ${Q.goal === "vo2max" ? fld("vo2max_goal", "Ziel-VO2max", `type="number" step="1" placeholder="${Q.vo2max ? Math.round(+Q.vo2max + 3) : ""}"`, "Realistisch sind 2–4 Punkte in 12 Wochen.") : ""}
+      </div>`;
+  }
+  if (i === 3) {
+    const est = Q.age ? Math.round(208 - 0.7 * Q.age) : null;
+    const auto = Math.max(est || 0, Math.min(s.hr_max_seen || 0, 225)) || null;  // wie im Backend
+    const hm = +Q.hr_max || auto;
+    return `<h3>Puls</h3><p class="t2" style="font-size:14px;margin-bottom:12px">Daraus entstehen deine Pulszonen. Wenn du einen Wert nicht kennst, lass das Feld leer. Dann schätze ich ihn.</p>
+      <div class="su-grid">
+        ${fld("hr_max", "Maximalpuls", `type="number" inputmode="numeric" placeholder="${auto ? "≈ " + auto : ""}"`, s.hr_max_seen ? `Höchster gemessener Wert beim Laufen: ${s.hr_max_seen}` : "Schätzung aus dem Alter: 208 − 0,7 × Alter")}
+        ${fld("hr_rest", "Ruhepuls", `type="number" inputmode="numeric" placeholder="≈ 60"`, s.hr_rest ? `Ø der letzten 14 Tage laut Garmin: ${s.hr_rest}` : "")}
+        ${fld("lthr", "Schwellenpuls (Laktatschwelle)", `type="number" inputmode="numeric" placeholder="${hm ? "≈ " + Math.round(0.89 * hm) : ""}"`, "Ø-Puls eines hart gelaufenen 30-min-Laufs. Leer lassen = 89 % vom Maximalpuls.")}
+      </div>`;
+  }
+  if (i === 4) {
+    const mondays = [0, 1, 2, 3].map((k) => addDays(sg.next_monday, 7 * k));
+    return `<h3>Deine Trainingswoche</h3>
+      <div class="field"><label>Wie oft willst du laufen?</label>${qseg("run_days", [[3, "3×"], [4, "4×"], [5, "5×"]])}</div>
+      <div class="field" style="margin-top:14px"><label>Langer Lauf am</label>${qseg("long_day", [["Sa", "Samstag"], ["So", "Sonntag"]])}</div>
+      <div class="su-grid" style="margin-top:14px">
+        <div class="field"><label>Krafttraining (1× pro Woche)</label>${qseg("strength", [[true, "Ja"], [false, "Nein"]])}</div>
+        <div class="field"><label>Lockeres Radfahren</label>${Q.run_days === 5 ? `<div class="hint" style="padding-top:8px">Bei 5 Lauftagen ist kein Platz für Rad.</div>` : qseg("bike", [[true, "Ja"], [false, "Nein"]])}</div>
+      </div>
+      <div class="field" style="margin-top:14px"><label>Start (Montag)</label>${qseg("start", mondays.map((d) => [d, fmtDM(d)]))}</div>
+      <div class="label" style="margin-top:16px">So sieht deine Woche aus</div>${setupRhythm(Q)}
+      <p class="hint" style="margin-top:6px">Einzelne Einheiten kannst du später in der App verschieben.</p>`;
+  }
+  const g = GOAL_INFO[Q.goal] || ["", ""];
+  const w = setupWeeks(Q);
+  return `<h3>Fast fertig</h3>
+    <div class="field"><label for="q_loc">Ort für Wetter-Hinweise (optional)</label>
+      <div class="row" style="gap:8px"><input id="q_loc" placeholder="${esc(Q.location ? Q.location.name : "z. B. Wien")}" style="flex:1;min-width:0"><button type="button" class="btn-ghost" id="geoBtn">Suchen</button></div>
+      ${SETUP.geo ? `<div class="move-list">${SETUP.geo.length ? SETUP.geo.map((r, k) => `<button type="button" class="move-opt" data-geo="${k}" style="grid-template-columns:1fr"><b>${esc(r.name)}</b><span class="t2">${esc([r.admin1, r.country].filter(Boolean).join(", "))}</span></button>`).join("") : `<p class="hint">Nichts gefunden.</p>`}</div>` : Q.location ? `<div class="hint">Gewählt: ${esc(Q.location.name)}</div>` : ""}
+    </div>
+    <div class="field" style="margin-top:14px"><label for="q_training_hour">Wann trainierst du meistens?</label>
+      <select id="q_training_hour" data-q="training_hour">${Array.from({ length: 18 }, (_, k) => k + 5).map((h) => `<option value="${h}" ${+Q.training_hour === h ? "selected" : ""}>${h}:00 Uhr</option>`).join("")}</select></div>
+    <div class="field" style="margin-top:14px"><label for="q_coach_context">Was soll dein Coach noch wissen? (optional)</label>
+      <textarea id="q_coach_context" data-q="coach_context" rows="3" placeholder="z. B. Knieprobleme 2025, trainiere abends, Schichtdienst …">${esc(Q.coach_context)}</textarea></div>
+    <div class="card tight summary" style="margin-top:16px">
+      <div class="label">Zusammenfassung</div>
+      <p><b>${g[0]} ${esc(g[1])}</b>${Q.goal !== "vo2max" && Q.goal_time ? ` in ${esc(Q.goal_time)}` : ""}${Q.goal !== "vo2max" && Q.race_date ? ` am ${fmtDate(Q.race_date)}` : ""}${Q.goal === "vo2max" ? ` · ${esc(Q.vo2max)} → ${esc(Q.vo2max_goal || Math.round(+Q.vo2max + 3))}` : ""}</p>
+      <p class="t2">${Math.min(w.n, sg.max_weeks)} Wochen ab ${fmtDate(w.long ? addDays(Q.race_date, -7 * (sg.max_weeks - 1) - ((toDate(Q.race_date).getDay() + 6) % 7)) : Q.start)} · ${Q.run_days} Lauftage · langer Lauf ${Q.long_day === "Sa" ? "samstags" : "sonntags"}${Q.strength ? " · Kraft" : ""}${Q.bike && Q.run_days < 5 ? " · Rad" : ""}</p>
+      <p class="t2">5 km in ${esc(Q.five_k)} · ${esc(LEVELS[Q.level] ? LEVELS[Q.level][1] : "")} pro Woche</p>
+    </div>
+    ${sg.has_plan ? `<div class="su-warn">Dein bisheriger Plan wird ersetzt und vorher gesichert. Anpassungen des Coaches und verschobene Einheiten gelten nur für den alten Plan.</div>` : ""}`;
+}
+
+async function renderSetup(el) {
+  if (!SETUP.sugg) {
+    el.innerHTML = `<div class="loading">Lade …</div>`;
+    try { SETUP.sugg = await (await fetch("/api/setup")).json(); } catch (_) { el.innerHTML = `<div class="card">Server nicht erreichbar.</div>`; return; }
+    if (!SETUP.Q) SETUP.Q = setupDefaults(SETUP.sugg);
+    if (view === "setup") render();
+    return;
+  }
+  const i = SETUP.step, last = i === SETUP_STEPS.length - 1, first = S.setup_needed;
+  el.innerHTML = `<div class="setup-wrap">
+    <div class="page-head"><h2>${first ? "Willkommen 👋" : "Neuer Plan"}</h2>
+      <p>${first ? "Ein paar Fragen, dann erstelle ich deinen persönlichen Trainingsplan." : "Beantworte die Fragen neu, dann erstelle ich einen passenden Plan."}</p></div>
+    <div class="su-progress" aria-label="Schritt ${i + 1} von ${SETUP_STEPS.length}">${SETUP_STEPS.map((t, k) => `<span class="${k <= i ? "on" : ""}" title="${t}"></span>`).join("")}</div>
+    <div class="label" style="margin:10px 0 14px">Schritt ${i + 1} von ${SETUP_STEPS.length} · ${SETUP_STEPS[i]}</div>
+    <form class="card su-form" id="suForm" novalidate>${setupStep(i)}
+      ${SETUP.error ? `<div class="su-error">${esc(SETUP.error)}</div>` : ""}
+      <div class="su-nav">
+        ${i > 0 ? `<button type="button" class="btn-ghost" id="suBack">Zurück</button>` : !first ? `<button type="button" class="btn-ghost" id="suCancel">Abbrechen</button>` : "<span></span>"}
+        <button type="submit" class="btn-primary" ${SETUP.busy ? "disabled" : ""}>${last ? (SETUP.busy ? "Erstelle Plan …" : "Plan erstellen") : "Weiter"}</button>
+      </div>
+    </form></div>`;
+  const Q = SETUP.Q, form = $("#suForm", el);
+  $$("[data-q]", el).forEach((n) => n.addEventListener("input", () => {
+    Q[n.dataset.q] = n.value;
+    if (["race_date", "vo2max"].includes(n.dataset.q)) { const pos = n.selectionStart; render(); const m = $(`#q_${n.dataset.q}`); if (m) { m.focus(); try { m.setSelectionRange(pos, pos); } catch (_) {} } }
+  }));
+  $$("[data-qseg]", el).forEach((seg) => $$("button", seg).forEach((b) => b.addEventListener("click", () => {
+    Q[seg.dataset.qseg] = JSON.parse(b.dataset.v);
+    if (Q.run_days === 5) Q.bike = false;
+    SETUP.error = "";
+    render();
+  })));
+  $$("[data-goal]", el).forEach((b) => b.addEventListener("click", () => {
+    if (Q.goal !== b.dataset.goal) Q.goal_time = ""; // Zielzeit gehört zur Strecke
+    Q.goal = b.dataset.goal; SETUP.error = ""; render();
+  }));
+  const geoBtn = $("#geoBtn", el);
+  if (geoBtn) {
+    const search = async () => {
+      const q = $("#q_loc", el).value.trim();
+      if (!q) return;
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=de&format=json`);
+        SETUP.geo = (await r.json()).results || [];
+      } catch (_) { SETUP.geo = []; toast("Ortssuche nicht erreichbar."); }
+      render();
+    };
+    geoBtn.onclick = search;
+    $("#q_loc", el).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  }
+  $$("[data-geo]", el).forEach((b) => b.addEventListener("click", () => {
+    const r = SETUP.geo[+b.dataset.geo];
+    Q.location = { name: r.name, lat: +r.latitude.toFixed(3), lon: +r.longitude.toFixed(3) };
+    SETUP.geo = null;
+    render();
+  }));
+  if ($("#suBack", el)) $("#suBack", el).onclick = () => { SETUP.step--; SETUP.error = ""; render(); window.scrollTo(0, 0); };
+  if ($("#suCancel", el)) $("#suCancel", el).onclick = () => { SETUP.Q = null; SETUP.sugg = null; history.back(); };
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = setupStepError(i);
+    if (err) { SETUP.error = err; render(); return; }
+    SETUP.error = "";
+    if (!last) { SETUP.step++; render(); window.scrollTo(0, 0); return; }
+    SETUP.busy = true;
+    render();
+    try {
+      const r = await fetch("/api/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Q) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Fehler beim Erstellen.");
+      S = j.state;
+      U.moves = {}; U.on_watch = {};
+      Object.assign(SETUP, { step: 0, sugg: null, Q: null, busy: false, error: "", geo: null });
+      view = "heute";
+      history.replaceState({ view, week: null, depth: 0 }, "", "#heute");
+      try { localStorage.setItem("view", view); } catch (_) {}
+      W = null;
+      render();
+      loadWeather();
+      toast(j.info || `Dein Plan steht: ${j.weeks} Wochen für „${j.goal}“.`);
+    } catch (ex) {
+      SETUP.busy = false;
+      SETUP.error = ex.message;
+      render();
+    }
+  });
+}
 
 // ---------- Diagramme (SVG) ----------
 const tip = $("#tooltip");
@@ -1141,7 +1378,7 @@ function setView(v, opts = {}) {
   render();
 }
 
-const VIEWS = ["heute", "woche", "plan", "aktivitaeten", "fortschritt"];
+const VIEWS = ["heute", "woche", "plan", "aktivitaeten", "fortschritt", "setup"];
 if (VIEWS.includes(location.hash.slice(1))) view = location.hash.slice(1);
 history.replaceState({ view, week: null, depth: 0 }, "", "#" + view);
 

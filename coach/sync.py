@@ -57,7 +57,7 @@ def _activities(c: GarminPersonalApiClient, start: date, end: date) -> list:
 
 
 def _save(name: str, payload: Any) -> None:
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     (DATA_DIR / f"{name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False), encoding="utf-8")
 
 

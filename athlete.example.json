@@ -1,5 +1,5 @@
 {
-  "_info": "Kopiere diese Datei nach athlete.json und trage deine Werte ein. athlete.json wird nicht ins Repo eingecheckt.",
+  "_info": "Beispiel. Normalerweise legt der Fragebogen in der App athlete.json an. training.goal: vo2max, 5k, 10k oder half; level: 0 < 15 km, 1 = 15–25, 2 = 25–40, 3 > 40 km pro Woche.",
   "name": "Alex",
   "age": 30,
   "weight_kg": 75,
@@ -11,7 +11,18 @@
   "vo2max_start": 48,
   "vo2max_goal": 51,
   "plan_start": "2026-11-09",
-  "plan_intro_days": 3,
+  "plan_intro_days": 0,
+  "training": {
+    "goal": "10k",
+    "run_days": 4,
+    "strength": true,
+    "bike": true,
+    "long_day": "So",
+    "level": 2,
+    "race_date": null,
+    "goal_time": "50:00",
+    "weeks": 12
+  },
   "bike_hr_offset": 10,
   "location": {
     "name": "Berlin",

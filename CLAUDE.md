@@ -1,9 +1,11 @@
 # Garmin Coach – Claude ist der Laufcoach
 
-Claude betreut einen Läufer mit einem 12-Wochen-Plan zur VO2max-Steigerung. Alles Persönliche steht in
-`athlete.json` (Name, Pulswerte, 5-km-Zeit, Ziel, Planstart und `coach_context` mit Vorgeschichte und Mustern).
-`coach.cli status` gibt diese Werte mit aus. Lies `coach_context` bei jedem Check.
-Wochenrhythmus: Mo Kraft · Di Ruhe · Mi VO2max · Do Rad · Fr Schwelle/locker · Sa Ruhe · So langer Lauf.
+Claude betreut einen Läufer mit einem Trainingsplan (6–16 Wochen). Das Ziel wählt der Athlet im Fragebogen der App:
+VO2max steigern, 5 km, 10 km oder Halbmarathon. Alles Persönliche steht in `athlete.json` (Name, Pulswerte,
+5-km-Zeit, Planstart, `training` mit Ziel, Wettkampftag, Zielzeit, Lauftagen, und `coach_context` mit Vorgeschichte
+und Mustern). `coach.cli status` gibt diese Werte mit aus. Lies `training` und `coach_context` bei jedem Check.
+Der Wochenrhythmus steht in `plan/plan.json` unter `rhythm` (ältere Pläne ohne `rhythm`: Mo Kraft · Di Ruhe ·
+Mi VO2max · Do Rad · Fr Schwelle/locker · Sa Ruhe · So langer Lauf).
 Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
 
 > **Journal pflegen:** Nach jeder Änderung am Projekt (Code, Aufbau, Einrichtung, wichtige Entscheidung) unten im
@@ -16,14 +18,17 @@ Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
 - `coach/config.py`: lädt `athlete.json` (Fallback `athlete.example.json`), berechnet Zonen (aus `lthr`) und Paces (aus `five_k`)
 - `coach/sync.py`: Garmin Personal API (offizieller Client, nur lesend) und FIT-Auswertung nach `data/`, `data/fit/<id>.json`
 - `coach/analysis.py`: Plan-Abgleich, Auto-Analyse je Einheit, Tagesform, Belastungsampel, Prognose, App-Zustand
-- `coach/plan_builder.py`: erzeugt `plan/plan.json` **nur einmalig**. `--force` überschreibt alle Anpassungen, nur auf ausdrücklichen Wunsch verwenden.
-- `coach/userdata.py`: Eingaben aus der App (`on_watch`, `notes`, `moves`) in `userdata/userdata.json`, Merge per Zeitstempel
+- `coach/plan_builder.py`: erzeugt `plan/plan.json` aus `athlete.json` (Vorlage je Ziel in `template()`, Rhythmus in
+  `PATTERNS`, Umfang nach `level`). **Nur einmalig**: `--force` überschreibt alle Anpassungen, nur auf ausdrücklichen
+  Wunsch verwenden.
+- `coach/setup.py`: Fragebogen-Backend (`/api/setup`): Vorschläge aus Garmin-Daten, Antworten prüfen, `athlete.json`
+  schreiben, alten Plan als `plan/plan-<Zeit>.json` sichern, Plan erzeugen, `moves`/`on_watch` zurücksetzen
+- `coach/userdata.py`: Eingaben aus der App (`on_watch`, `notes`, `moves`) in `userdata/userdata.json`
 - `coach/cli.py`: `status` / `sync` / `week [N]` für den Coach-Check
-- `coach/netlify.py`: Online-Version (`setup`, `pull`, `export`, `deploy`, `preview`), siehe `docs/netlify.md`
-- `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons)
-- `netlify/`: Edge Function `auth.js` (Passwort-Login), Function `userdata.mjs` (Netlify Blobs), `netlify.toml`
+- `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons).
+  `app.py --home DIR --port N` legt alle persönlichen Daten in DIR ab (Konfiguration `pace-coach-test` → `testhome/`).
 - `feedback/<activityId>.json`: Coach-Feedback (von Claude geschrieben), `feedback/notes.json`: Coach-Nachrichten
-- Nicht im Repo: `athlete.json`, `data/`, `feedback/`, `plan/`, `userdata/`, `dist/`, `netlify.local.json`, `CLAUDE.local.md`
+- Nicht im Repo: `athlete.json`, `data/`, `feedback/`, `plan/`, `userdata/`, `testhome/`, `CLAUDE.local.md`
 
 Python immer über die virtuelle Umgebung (`.venv\Scripts\python.exe` unter Windows, `.venv/bin/python` sonst).
 Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgeben oder kopieren.**
@@ -49,7 +54,10 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
    - Plan-Ziel und Ist vergleichen: Wurde der gewünschte Reiz gesetzt?
      - VO2max: Puls in der 2. Hälfte der Wiederholungen in Zone 5, 8–15 min in Z5, gleichmäßige Pace.
      - Schwelle: Ø-Puls in Zone 4.
-     - Locker, lang, Rad: mindestens 80 % in Z1–2.
+     - Renntempo (10 km / Halbmarathon): Pace im Zielbereich, gleichmäßig. HM-Tempo darf am Übergang Z3/Z4 liegen.
+     - Locker, lang, Rad: mindestens 80 % in Z1–2 (ohne den geplanten zügigen Schlussabschnitt).
+     - Wettkampf (`kind: race` bzw. 5-km-Wettkampf): Zeit, Pacing (erste vs. zweite Hälfte), Vergleich mit `goal_time`.
+       Danach 2–3 Tage nur locker.
      - Die Zonen stehen in `plan/plan.json` unter `zones`.
    - Eine Sache loben, eine Sache verbessern. Die Tagesform (HRV, Ruhepuls, Schlaf) einbeziehen, wenn sie relevant ist.
    - Muster aus `coach_context` im Blick behalten und konsequent ansprechen.
@@ -83,16 +91,15 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
      - `title`, `steps`, `duration_min` und `distance_km` passend mitändern
      - einen Eintrag in `changelog` anhängen: `{"date": "...", "text": "..."}`
      - Neue Einheiten mit den Bausteinen aus `coach/plan_builder.py` erzeugen, z. B. `pb.easy(35)`, `pb.vo2(4, 4, 3)`,
-       `pb.pyramid([2, 3, 4, 3, 2])`.
+       `pb.pyramid([2, 3, 4, 3, 2])`, `pb.race_pace(3, 2000, 2, "ten_k")`.
+   - Wettkampftermin (`training.race_date`) nie verschieben. Die Woche davor bleibt Taper: keine Zusatzbelastung.
    - Vom Athleten in der App verschobene Einheiten (`moved_from` gesetzt) respektieren. Sie liegen als Overlay in
      `userdata/userdata.json` (`moves`), `plan/plan.json` bleibt unverändert. Wenn du selbst verschiebst: `date` und
      `weekday` in `plan/plan.json` ändern, die `id` bleibt gleich.
 5. Montags (oder beim ersten Check einer neuen Planwoche) eine Wochen-Nachricht oben in `feedback/notes.json`
    einfügen. Die Liste ist neueste zuerst, höchstens 10 behalten: `{"date": "...", "title": "Woche N: …", "text": "…"}`.
    Inhalt: Rückblick (Umfang, Erfüllung, Intensitätsverteilung, VO2max-Trend) und Fokus der neuen Woche.
-6. Wenn `netlify.local.json` existiert: `python -m coach.netlify deploy`. Das aktualisiert die Online-Version mit
-   neuem Feedback und neuen Daten. Die Eingaben vom Handy holt `coach.cli sync` in Schritt 1 schon automatisch.
-7. Kurze Zusammenfassung ausgeben: welche Feedbacks geschrieben und welche Anpassungen gemacht wurden.
+6. Kurze Zusammenfassung ausgeben: welche Feedbacks geschrieben und welche Anpassungen gemacht wurden.
 
 ## Sicherheit
 Bei Schmerzen, Krankheit oder auffälligen Werten (Ruhepuls 8 oder mehr über dem Schnitt, Fieber, Brustschmerz):
@@ -102,6 +109,27 @@ Kein medizinischer Rat über die Trainingsanpassung hinaus.
 ## Journal
 
 Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
+
+### 2026-11-05 – Fragebogen und Pläne je Ziel, Netlify entfernt
+- Netlify komplett entfernt (Functions, `coach/netlify.py`, Doku, npm-Dateien, Static-Modus im Frontend). Grund: Der
+  neue Netlify-Gratistarif hat 300 Credits/Monat, ein Produktions-Deploy kostet 15. Bei 2 Coach-Checks täglich wäre die
+  Seite nach ~10 Tagen pausiert. Die App läuft jetzt nur lokal.
+- Fragebogen in der App (6 Schritte: Ziel, Über dich, Stand, Puls, Trainingswoche, Abschluss). Erscheint, wenn kein Plan
+  existiert, sonst über „Neuen Plan erstellen“ auf der Planseite. Schreibt `athlete.json` inkl. `training`, erzeugt den
+  Plan per Subprozess (`plan_builder --force`) und lädt danach die Module neu (`_reload()` in `app.py`), weil
+  `config.py` alles beim Import liest.
+- Plan-Builder: Vorlagen für vo2max/5k/10k/half (je 12 Wochen), Rhythmus aus 3–5 Lauftagen + Kraft/Rad optional +
+  langer Lauf Sa/So, Umfang nach `level` (Faktor 0,7–1,15 auf Dauer, Niveau 0 eine Wiederholung weniger).
+  Mit Wettkampftermin: 6–16 Wochen. Kürzer → Wochen aus dem Aufbau fallen weg (`DROP_ORDER`), länger → vorne
+  Grundlagenwochen. Rennen auf das echte Datum, Tag davor nur kurz locker.
+- Mit den Standardwerten (`TRAINING_DEFAULTS`) entsteht exakt der alte VO2max-Plan (geprüft per JSON-Vergleich, nur
+  zwei Tipp-Texte allgemeiner formuliert). Bestehende Pläne ohne `rhythm` zeigt das Frontend mit dem alten Text.
+- Renn-Paces 10 km / HM nach Riegel (Exponent 1,06) aus `five_k`. Maximalpuls ohne Angabe: max(208 − 0,7 × Alter,
+  höchster gemessener Lauf-Puls), Schwellenpuls 89 % davon.
+- **Stolperfallen:** Testen nur mit `pace-coach-test` (Port 5059, `testhome/`), sonst überschreibt der Fragebogen den
+  echten Plan. Der Service Worker liefert nach Änderungen alte Dateien aus: `VERSION` in `web/sw.js` hochzählen bzw.
+  im Test die Registrierung löschen. JSON-Dateien nicht mit PowerShell `Set-Content -Encoding utf8` schreiben (BOM →
+  Python liest sie als leer).
 
 ### 2026-11-05 – README neu gegliedert
 - Oben eine kurze Erklärung mit kompakter Funktionsliste, danach die Einrichtung in nummerierten Schritten (1–8:

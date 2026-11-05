@@ -8,18 +8,21 @@ beides lässt sich in athlete.json auch direkt überschreiben ("zones_run", "pac
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
+# Persönliche Daten liegen im Projektordner. COACH_HOME legt sie woanders ab (z. B. zum Testen: app.py --home DIR).
+HOME = Path(os.environ["COACH_HOME"]).resolve() if os.environ.get("COACH_HOME") else ROOT
+DATA_DIR = HOME / "data"
 FIT_DIR = DATA_DIR / "fit"
-PLAN_FILE = ROOT / "plan" / "plan.json"
-FEEDBACK_DIR = ROOT / "feedback"          # Coach-Feedback von Claude: <activityId>.json
+PLAN_FILE = HOME / "plan" / "plan.json"
+FEEDBACK_DIR = HOME / "feedback"          # Coach-Feedback von Claude: <activityId>.json
 NOTES_FILE = FEEDBACK_DIR / "notes.json"   # allgemeine Coach-Nachrichten
 SYNC_INFO_FILE = DATA_DIR / "sync_info.json"
-USERDATA_FILE = ROOT / "userdata" / "userdata.json"  # Eingaben aus der App
-ATHLETE_FILE = ROOT / "athlete.json"
+USERDATA_FILE = HOME / "userdata" / "userdata.json"  # Eingaben aus der App
+ATHLETE_FILE = HOME / "athlete.json"
 ATHLETE_EXAMPLE = ROOT / "athlete.example.json"
 
 
@@ -32,11 +35,25 @@ _A = _load_athlete()
 
 ATHLETE = {k: _A.get(k) for k in ("name", "age", "weight_kg", "height_cm", "hr_rest", "hr_max", "lthr",
                                   "vo2max_start", "vo2max_goal", "five_k", "coach_context",
-                                  "location", "training_hour")}
+                                  "location", "training_hour", "training")}
 
 PLAN_START = date.fromisoformat(_A["plan_start"])   # Montag von Woche 1
 PLAN_INTRO_DAYS = int(_A.get("plan_intro_days", 3))  # lockere Einstiegstage vor Woche 1 (0 = keine)
-PLAN_WEEKS = 12
+
+# Trainings-Einstellungen aus dem Fragebogen. Ohne Angabe: der ursprüngliche VO2max-Plan.
+GOALS = {"vo2max": "VO2max steigern", "5k": "5 km schneller", "10k": "10 km", "half": "Halbmarathon"}
+TRAINING_DEFAULTS = {
+    "goal": "vo2max",      # vo2max | 5k | 10k | half
+    "run_days": 3,         # Lauftage pro Woche: 3, 4 oder 5
+    "strength": True,      # Krafttraining (1× pro Woche)
+    "bike": True,          # lockere Radeinheit (nur bei 3–4 Lauftagen)
+    "long_day": "So",      # Tag für den langen Lauf: Sa oder So
+    "level": 2,            # aktueller Umfang: 0 < 15 km, 1 = 15–25, 2 = 25–40, 3 > 40 km pro Woche
+    "race_date": None,     # Wettkampftag (ISO) oder None
+    "goal_time": None,     # Zielzeit "mm:ss" oder "h:mm:ss" oder None
+}
+TRAINING = TRAINING_DEFAULTS | (_A.get("training") or {})
+ATHLETE["training"] = TRAINING  # der Coach sieht immer die wirksamen Einstellungen
 
 ZONE_NAMES = ["Regeneration", "Grundlage", "Tempo", "Schwelle", "VO2max"]
 
@@ -66,10 +83,13 @@ def _paces_from_5k(five_k: str) -> dict:
     m, s = five_k.split(":")
     p = (int(m) * 60 + int(s)) / 5  # s/km
     r = lambda a, b: f"{_mmss(p + a)}–{_mmss(p + b)}"
+    # Renntempo 10 km / Halbmarathon nach Riegel (t2 = t1 · (d2/d1)^1,06)
+    p10, phm = p * 2 ** 0.06 - p, p * (21.0975 / 5) ** 0.06 - p
     return {
         "easy": r(105, 145), "long": r(105, 135), "tempo": r(55, 68), "threshold": r(28, 43),
         "vo2": r(-12, -2), "vo2_fast": r(-22, -12), "short": r(-35, -22), "short_fast": r(-42, -27),
         "strides": f"~{_mmss(p - 50)}", "five_k": _mmss(p),
+        "ten_k": r(p10 - 3, p10 + 3), "half": r(phm - 4, phm + 4),
     }
 
 

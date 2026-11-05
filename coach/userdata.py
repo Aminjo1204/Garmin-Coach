@@ -1,7 +1,6 @@
 """Eingaben aus der App (Häkchen „auf der Uhr“, eigenes Feedback, verschobene Einheiten).
 
 Format: {kind: {key: {"value": ..., "at": ISO-Zeit}}}. value = None bedeutet „gelöscht“.
-Jeder Eintrag trägt einen Zeitstempel, damit sich Kopien (lokal / Netlify) per „neuester gewinnt“ zusammenführen lassen.
 """
 
 from __future__ import annotations
@@ -42,24 +41,6 @@ def set_entry(kind: str, key: str, value) -> dict:
     d[kind][str(key)] = {"value": value, "at": now_iso()}
     save(d)
     return d
-
-
-def _ts(e: dict) -> float:
-    try:
-        return datetime.fromisoformat((e.get("at") or "").replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return 0.0
-
-
-def merge(a: dict, b: dict) -> dict:
-    """Zusammenführen zweier Stände: pro Eintrag gewinnt der neuere Zeitstempel."""
-    out = empty()
-    for k in KINDS:
-        for src in (a.get(k, {}), b.get(k, {})):
-            for key, e in src.items():
-                if key not in out[k] or _ts(e) > _ts(out[k][key]):
-                    out[k][key] = e
-    return out
 
 
 def values(d: dict, kind: str) -> dict:

@@ -184,7 +184,7 @@ def analyze(a: dict, fit: dict | None, s: dict | None, plan_first: str = "") -> 
                           "max_hr": w["max_hr"]} for i, w in enumerate(work)]
 
     # Dauer vs. Plan
-    if s and s.get("duration_min"):
+    if s and s.get("duration_min") and kind not in ("race", "test"):
         ratio = m["dur_min"] / s["duration_min"]
         if ratio < 0.8 and kind in ("vo2", "short", "hills", "threshold", "tempo"):
             add("info", f"{m['dur_min']} min statt {s['duration_min']} min. Ein- und Auslaufen nicht zu kurz halten, "
@@ -287,6 +287,17 @@ def analyze(a: dict, fit: dict | None, s: dict | None, plan_first: str = "") -> 
             add("ok", f"5-km-Zeit: {m['test_5k']} (Ø {fmt_pace(l['pace_s'])}/km, Ø-Puls {l['avg_hr']}).")
         else:
             add("info", "Testabschnitt nicht als eigene Runde erkannt. Drück beim nächsten Test zu Beginn und am Ende die Runden-Taste.")
+
+    if kind == "race":
+        planned = next((x for x in _flat(s["steps"]) if x["type"] == "work"), None)
+        if m["dist_km"] and a.get("duration"):
+            add("ok", f"Zielzeit {fmt_time(a['duration'])} für {m['dist_km']:.2f} km (Ø {fmt_pace(m['pace_s'])}/km).")
+        target = _pace_range(planned.get("pace")) if planned else None
+        if target and m["pace_s"]:
+            if m["pace_s"] <= target[1]:
+                add("ok", f"Schneller oder im Plan-Tempo ({fmt_pace(target[0])}–{fmt_pace(target[1])}/km). Stark!")
+            else:
+                add("info", f"Etwas langsamer als das Plan-Tempo ({fmt_pace(target[0])}–{fmt_pace(target[1])}/km).")
 
     if kind == "strength":
         add("ok", "Kraftreiz gesetzt." if m["dur_min"] >= 30 else "Kurze Einheit. Wenn möglich alle Übungen schaffen.")
@@ -626,10 +637,12 @@ def build_state() -> dict:
     return {
         "generated": datetime.now().isoformat(timespec="seconds"),
         "today": today,
+        "setup_needed": not plan.get("sessions"),
         "athlete": ATHLETE,
         "goal": plan.get("goal"),
         "sync": data["sync"],
-        "plan": {k: plan.get(k) for k in ("start", "phases", "zones", "paces", "changelog")} |
+        "plan": {k: plan.get(k) for k in ("start", "phases", "zones", "paces", "changelog", "rhythm", "goal_id",
+                                          "training")} |
                 {"weeks": weeks, "sessions": out_sessions},
         "activities": out_acts,
         "readiness": {"today": readiness_today(series, today_session, load["today"]["acwr"]), "series": series},

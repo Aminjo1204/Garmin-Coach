@@ -1,9 +1,0 @@
-{
-  "name": "garmin-coach",
-  "private": true,
-  "type": "module",
-  "description": "Netlify-Functions für die Online-Version von Garmin Coach",
-  "dependencies": {
-    "@netlify/blobs": "11.1.6"
-  }
-}

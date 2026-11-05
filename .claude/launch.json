@@ -8,10 +8,10 @@
       "port": 5057
     },
     {
-      "name": "online-preview",
+      "name": "pace-coach-test",
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
-      "runtimeArgs": ["-m", "coach.netlify", "preview"],
-      "port": 5058
+      "runtimeArgs": ["app.py", "--home", "testhome", "--port", "5059"],
+      "port": 5059
     }
   ]
 }

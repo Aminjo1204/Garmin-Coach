@@ -1,13 +1,12 @@
-# Persönliche Daten – niemals einchecken
+﻿# Persönliche Daten – niemals einchecken
 athlete.json
 data/
 feedback/
 plan/
 userdata/
-dist/
+testhome/
 netlify.local.json
 .netlify/
-node_modules/
 
 # Python
 .venv/
