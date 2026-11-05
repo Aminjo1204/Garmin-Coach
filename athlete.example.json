@@ -1,0 +1,17 @@
+{
+  "_info": "Kopiere diese Datei nach athlete.json und trage deine Werte ein. athlete.json wird nicht ins Repo eingecheckt.",
+  "name": "Alex",
+  "age": 30,
+  "weight_kg": 75,
+  "height_cm": 180,
+  "hr_rest": 55,
+  "hr_max": 195,
+  "lthr": 175,
+  "five_k": "24:00",
+  "vo2max_start": 48,
+  "vo2max_goal": 51,
+  "plan_start": "2026-11-09",
+  "plan_intro_days": 3,
+  "bike_hr_offset": 10,
+  "coach_context": "Freitext für den Coach: Vorgeschichte, Muster, Verletzungen, Vorlieben (z. B. 'trainiert abends', 'Knieprobleme 2025')."
+}

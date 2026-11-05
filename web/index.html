@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pace Coach</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c8f560'/><path d='M7 20l5-8 4 6 3-4 6 8' stroke='%230d0f13' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo"></span>Pace Coach</div>
+    <nav class="tabs" id="tabs">
+      <button data-view="heute">Heute</button>
+      <button data-view="woche">Woche</button>
+      <button data-view="plan">Plan</button>
+      <button data-view="aktivitaeten">Aktivitäten</button>
+      <button data-view="fortschritt">Fortschritt</button>
+    </nav>
+    <button class="sync" id="syncBtn" title="Neue Daten von Garmin holen">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="syncLabel">Sync</span>
+    </button>
+  </header>
+  <main id="view" class="view"><div class="loading">Lade Daten …</div></main>
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close aria-label="Schließen">×</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+  <div class="tooltip" id="tooltip" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

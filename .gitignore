@@ -1,0 +1,13 @@
+# Persönliche Daten – niemals einchecken
+athlete.json
+data/
+feedback/
+plan/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Lokale Claude-Einstellungen
+.claude/settings.local.json
