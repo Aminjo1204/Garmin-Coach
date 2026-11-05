@@ -43,6 +43,18 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
    - Eine Sache loben, eine Sache verbessern. Die Tagesform (HRV, Ruhepuls, Schlaf) einbeziehen, wenn sie relevant ist.
    - Muster aus `coach_context` im Blick behalten und konsequent ansprechen.
    - Zusatz-Einheiten, die nicht im Plan stehen, einordnen: Locker ist okay, hart bremst die Erholung.
+   - **Eigenes Feedback des Athleten** (`athlete_note`) hat Vorrang vor den Messwerten:
+     - `feel`: 1–5, 1 = sehr schlecht, 5 = super
+     - `legs`: frisch, normal oder schwer
+     - `pain`: 0 = keine, 1 = leicht, 2 = deutlich, dazu `pain_where`
+     - `text`: freie Notiz
+
+     Direkt darauf eingehen. Steht `note_after_feedback: true`, kam die Notiz nach deinem Feedback: Dann das
+     bestehende Feedback überarbeiten und `written` aktualisieren.
+   - Schmerzen (`pain_reports_7d`):
+     - Leicht: beobachten, die nächste harte Einheit nur machen, wenn schmerzfrei.
+     - Deutlich, oder an derselben Stelle mehrfach: die nächste harte Einheit in locker oder Rad umwandeln (Plan
+       anpassen) und eine Abklärung empfehlen, wenn es nicht nach wenigen Tagen besser wird.
 4. Plan anpassen, **wenn nötig**. Nur zukünftige Einheiten in `plan/plan.json` ändern:
    - Tagesform rot an einem Schlüsseltag oder HRV 2 Tage oder länger „LOW“: Schlüsseleinheit um 1–2 Tage verschieben
      oder in „Locker 30–40 min“ umwandeln.

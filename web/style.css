@@ -149,6 +149,17 @@ ol.sheet ol.sheet > li { background: var(--surface); }
 .watch-chip { color: var(--warning); border-color: rgba(250, 178, 25, .35); }
 .watch-chip.on { color: #4fd44f; border-color: rgba(12, 163, 12, .4); }
 
+/* Eigenes Feedback */
+.mynote { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
+.noteform { display: grid; gap: 8px; background: var(--surface-2); border-radius: 12px; padding: 14px; }
+.noteform .label { margin-top: 4px; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { flex: 1; min-width: 44px; min-height: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; font-size: 15px; color: var(--text-2); }
+.seg button.on { border-color: var(--accent); color: var(--text); background: rgba(200, 245, 96, .12); }
+.noteform input, .noteform textarea { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; resize: vertical; }
+.noteform input:focus, .noteform textarea:focus { outline: 2px solid rgba(200, 245, 96, .5); outline-offset: 0; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 10px 18px; font-weight: 700; }
+
 /* Feedback */
 .feedback { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; }
 .feedback h4 { font-size: 16px; }

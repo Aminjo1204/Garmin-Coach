@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from . import userdata
 from .config import (ATHLETE, DATA_DIR, EASY_CAP_BIKE, EASY_CAP_RUN, FEEDBACK_DIR, FIT_DIR, NOTES_FILE, PLAN_FILE,
                      SYNC_INFO_FILE, THR_HI, THR_LO, VO2_HR, sport_of)
 
@@ -73,6 +74,7 @@ def load_all() -> dict:
         "feedback": feedback,
         "notes": _load(NOTES_FILE, []),
         "sync": _load(SYNC_INFO_FILE, {}),
+        "user": userdata.load(),
     }
 
 
@@ -427,6 +429,8 @@ def build_state() -> dict:
             "session_title": s["title"] if s else None,
             "analysis": an,
             "feedback": data["feedback"].get(aid),
+            "athlete_note": (data["user"]["notes"].get(str(aid)) or {}).get("value"),
+            "athlete_note_at": (data["user"]["notes"].get(str(aid)) or {}).get("at"),
         })
 
     act_by_session: dict[str, list] = {}

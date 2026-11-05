@@ -142,6 +142,7 @@ function bindCommon(root) {
     const id = n.dataset.watch;
     uset("on_watch", id, uval("on_watch", id) ? null : true);
   }));
+  bindNoteForms(root);
   $$("[data-copy]", root).forEach((n) => n.addEventListener("click", async (e) => {
     e.preventDefault(); e.stopPropagation();
     try { await navigator.clipboard.writeText(n.dataset.copy); toast("Name kopiert."); } catch (_) { toast(n.dataset.copy); }
@@ -168,6 +169,7 @@ function renderToday(el) {
     <div class="grid grid-hero">
       <div class="stack">
         ${main ? sessionCard(main, { hero: true }) : `<div class="card"><h3>Heute nichts geplant</h3><p class="t2" style="margin-top:6px">Der Plan startet am ${fmtDate(planStart)}</p></div>`}
+        ${feelPrompt()}
         ${watchReminder()}
         ${notes.map((n) => `<div class="card note-card"><div class="label">Coach · ${fmtDate(n.date)}</div><h3 style="margin-top:6px">${esc(n.title)}</h3><p class="t2" style="margin-top:6px;white-space:pre-line">${esc(n.text)}</p></div>`).join("")}
         ${latest ? `<div><div class="section-head"><h3>Letzte Einheit</h3><button class="chip" data-view-link="aktivitaeten">Alle ansehen →</button></div>${activityFeedbackCard(latest)}</div>` : ""}
@@ -377,6 +379,7 @@ function activityFeedbackCard(a) {
       <span class="rating ${an.score !== null ? an.rating : "muted"}">${esc(an.rating)}${an.score !== null ? " · " + an.score : ""}</span></div>
     <div class="act-sub" style="margin-top:6px">${actStats(a)}</div>
     ${an.metrics.zone_pct ? zoneBar(an.metrics.zone_pct) : ""}
+    ${noteOf(a) ? `<div class="mynote" style="margin-top:12px"><div class="label">Dein Feedback</div>${noteSummary(noteOf(a))}</div>` : ""}
     ${a.feedback ? feedbackBlock(a.feedback) : `<ul class="points">${an.points.slice(0, 4).map(pointLi).join("")}</ul><p class="muted" style="font-size:12.5px;margin-top:10px">Coach-Feedback folgt nach dem nächsten Check.</p>`}
   </div>`;
 }
@@ -504,16 +507,100 @@ function renderActivities(el) {
         <div class="sport-ico">${SPORT_ICO[a.analysis.metrics.sport]}</div>
         <div><div class="act-name">${esc(a.name)}</div>
           <div class="act-sub"><span>${fmtDate(a.date)}</span>${actStats(a)}</div>
-          ${a.session_title ? `<div class="act-sub" style="margin-top:2px"><span>Plan: ${esc(a.session_title)}</span>${a.feedback ? `<span style="color:var(--accent)">● Coach-Feedback</span>` : ""}</div>` : ""}</div>
+          ${a.session_title || a.feedback || noteOf(a) ? `<div class="act-sub" style="margin-top:2px">${a.session_title ? `<span>Plan: ${esc(a.session_title)}</span>` : ""}${noteOf(a) ? `<span>${noteOf(a).feel ? FEELS[noteOf(a).feel - 1] : "💬"} dein Feedback</span>` : ""}${a.feedback ? `<span style="color:var(--accent)">● Coach-Feedback</span>` : ""}</div>` : ""}</div>
         <span class="rating ${a.analysis.score !== null ? a.analysis.rating : "muted"}">${esc(a.analysis.rating)}</span>
       </div>`).join("") || `<div class="card empty">Seit Planstart noch keine Aktivitäten. Sobald du trainierst und die Uhr synchronisiert, erscheint die Einheit hier.</div>`}
     </div>`;
   $$("[data-f]", el).forEach((b) => b.addEventListener("click", () => { actFilter = b.dataset.f; render(); }));
 }
 
-async function openActivity(id) {
+// ----- Eigenes Feedback -----
+const FEELS = ["😫", "😕", "😐", "🙂", "😄"];
+const FEEL_TXT = ["Sehr schlecht", "Zäh", "Okay", "Gut", "Super"];
+const LEGS = [["frisch", "Frisch"], ["normal", "Normal"], ["schwer", "Schwer"]];
+const PAIN = [[0, "Keine"], [1, "Leicht"], [2, "Deutlich"]];
+
+function noteOf(a) {
+  const v = uval("notes", String(a.id));
+  return v !== undefined ? v : a.athlete_note;
+}
+
+function noteSummary(n) {
+  const parts = [];
+  if (n.feel) parts.push(`<span class="chip">${FEELS[n.feel - 1]} ${FEEL_TXT[n.feel - 1]}</span>`);
+  if (n.legs) parts.push(`<span class="chip">Beine: ${esc(n.legs)}</span>`);
+  if (n.pain) parts.push(`<span class="chip" style="color:${n.pain > 1 ? "#f07171" : "var(--warning)"}">Schmerz: ${PAIN[n.pain][1].toLowerCase()}${n.pain_where ? " · " + esc(n.pain_where) : ""}</span>`);
+  return `<div class="row wrap" style="gap:6px;margin-top:8px">${parts.join("")}</div>${n.text ? `<p class="t2" style="margin-top:8px;font-size:14px;white-space:pre-line">„${esc(n.text)}“</p>` : ""}`;
+}
+
+function noteForm(a, edit) {
+  const n = noteOf(a);
+  if (n && !edit) {
+    return `<div class="mynote"><div class="row between"><div class="label">Dein Feedback</div><button class="chip" data-note-edit="${a.id}">Bearbeiten</button></div>${noteSummary(n)}</div>`;
+  }
+  const d = n || {};
+  const seg = (field, opts) => `<div class="seg" data-field="${field}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${d[field] === v ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  return `<form class="noteform" data-note-form="${a.id}">
+    <div class="label">Wie war's?</div>
+    ${seg("feel", FEELS.map((f, i) => [i + 1, f]))}
+    <div class="label">Beine</div>${seg("legs", LEGS)}
+    <div class="label">Schmerzen</div>${seg("pain", PAIN)}
+    <input name="pain_where" placeholder="Wo? z. B. linke Wade, Knie außen" value="${esc(d.pain_where || "")}" ${d.pain ? "" : "hidden"}>
+    <textarea name="text" rows="3" placeholder="Notiz für den Coach (optional): Wetter, Stress, wie sich die Intervalle angefühlt haben …">${esc(d.text || "")}</textarea>
+    <div class="row" style="gap:8px"><button type="submit" class="btn-primary">Speichern</button>${n ? `<button type="button" class="chip" data-note-cancel="${a.id}">Abbrechen</button>` : ""}</div>
+    <p class="muted" style="font-size:12px">Ich sehe dein Feedback beim nächsten Coach-Check und gehe darauf ein.</p>
+  </form>`;
+}
+
+function bindNoteForms(root) {
+  $$("[data-note-form]", root).forEach((form) => {
+    $$(".seg", form).forEach((seg) => $$("button", seg).forEach((b) => b.addEventListener("click", () => {
+      const wasOn = b.classList.contains("on");
+      $$("button", seg).forEach((x) => x.classList.remove("on"));
+      if (!wasOn) b.classList.add("on");
+      if (seg.dataset.field === "pain") form.pain_where.hidden = !(b.classList.contains("on") && +b.dataset.v > 0);
+    })));
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const pick = (f) => { const b = $(`.seg[data-field="${f}"] button.on`, form); return b ? b.dataset.v : null; };
+      const note = {
+        feel: pick("feel") ? +pick("feel") : null,
+        legs: pick("legs"),
+        pain: pick("pain") !== null ? +pick("pain") : 0,
+        pain_where: form.pain_where.hidden ? "" : form.pain_where.value.trim(),
+        text: form.text.value.trim(),
+      };
+      if (!note.feel && !note.legs && !note.pain && !note.text) { toast("Bitte mindestens eine Angabe machen."); return; }
+      const id = form.dataset.noteForm;
+      uset("notes", id, note);
+      toast("Danke! Ich schau's mir beim nächsten Check an.");
+    });
+  });
+  $$("[data-note-edit]", root).forEach((b) => b.addEventListener("click", () => openActivity(+b.dataset.noteEdit, { editNote: true })));
+  $$("[data-note-cancel]", root).forEach((b) => b.addEventListener("click", () => openActivity(+b.dataset.noteCancel)));
+  $$("[data-quickfeel]", root).forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [id, v] = b.dataset.quickfeel.split(":");
+    uset("notes", id, { ...(uval("notes", id) || {}), feel: +v });
+    openActivity(+id, { editNote: true });
+  }));
+}
+
+function feelPrompt() {
+  const since = addDays(S.today, -2);
+  const a = S.activities.find((x) => x.date >= since && !noteOf(x));
+  if (!a) return "";
+  return `<div class="card" style="border-color:rgba(200,245,96,.35)">
+    <div class="label" style="color:var(--accent)">Wie war's?</div>
+    <div class="day-title" style="margin-top:6px">${SPORT_ICO[a.analysis.metrics.sport]} ${esc(a.name)} · ${fmtDate(a.date)}</div>
+    <div class="seg" style="margin-top:10px">${FEELS.map((f, i) => `<button data-quickfeel="${a.id}:${i + 1}" title="${FEEL_TXT[i]}">${f}</button>`).join("")}</div>
+  </div>`;
+}
+
+async function openActivity(id, opts = {}) {
   const a = actById(id);
   if (!a) return;
+  modalRefresh = () => openActivity(id);
   const an = a.analysis, m = an.metrics;
   const s = a.session_id ? sessionById(a.session_id) : null;
   openModal(`
@@ -526,6 +613,7 @@ async function openActivity(id) {
       ${m.vo2_min !== null && m.sport !== "strength" ? stat("Zeit in Z5", m.vo2_min + " min") : ""}${m.rpe ? stat("RPE", m.rpe + "/10") : ""}${m.vo2max ? stat("VO2max", m.vo2max) : ""}
       ${m.te_aer ? stat("Training Effect", `${(+m.te_aer).toFixed(1)} / ${(+m.te_ana || 0).toFixed(1)}`) : ""}${m.test_5k ? stat("5 km", m.test_5k) : ""}
     </div>
+    <div style="margin-top:16px">${noteForm(a, opts.editNote)}</div>
     ${a.feedback ? feedbackBlock(a.feedback) : ""}
     <h3 style="margin-top:20px">Auto-Analyse</h3>
     <ul class="points">${an.points.map(pointLi).join("") || "<li>Keine Auffälligkeiten.</li>"}</ul>
