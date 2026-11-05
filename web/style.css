@@ -206,6 +206,9 @@ ol.sheet ol.sheet > li { background: var(--surface); }
 .plan-week .wk small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
 .plan-week.current { border-color: rgba(200, 245, 96, .5); }
 .mini-sessions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.mini-sessions .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* Grid-Inhalte dürfen schrumpfen – sonst schieben lange Texte die Seite seitlich aus dem Bild */
+.plan-week > *, .day > *, .act > *, .grid > *, .row > div, .list-row > div { min-width: 0; }
 .phase-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
 /* Activities */
@@ -268,6 +271,14 @@ table.laps td { padding: 6px; border-bottom: 1px solid var(--border); font-varia
 .loading { color: var(--text-2); padding: 40px 0; text-align: center; }
 .empty { color: var(--muted); font-size: 14px; }
 .note-card { border-left: 3px solid var(--accent); }
+.note-text { color: var(--text-2); margin-top: 6px; white-space: pre-line; font-size: 14.5px; }
+.note-text.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.link-btn { background: none; border: 0; padding: 6px 0 0; color: var(--accent); font-weight: 600; font-size: 14px; }
+.list { display: grid; }
+.list-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.list-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.chev { color: var(--muted); font-size: 22px; line-height: 1; }
+.next-up { margin-top: 12px; padding: 12px; background: var(--surface-2); border-radius: 12px; cursor: pointer; }
 
 /* Ränder für Notch / Home-Indikator (App-Modus auf dem Handy) */
 .topbar { padding-top: max(10px, env(safe-area-inset-top)); }
@@ -276,20 +287,43 @@ table.laps td { padding: 6px; border-bottom: 1px solid var(--border); font-varia
   /* backdrop-filter würde die fixierte Tab-Leiste an die Kopfzeile binden */
   .topbar { padding: max(10px, env(safe-area-inset-top)) 16px 10px; gap: 8px; justify-content: space-between; backdrop-filter: none; background: var(--bg); }
   /* Tab-Leiste wie in einer App unten fixiert */
+  /* kein backdrop-filter: iOS zeichnet sonst die Kopfzeile darüber unscharf */
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; gap: 0; justify-content: space-around;
-    background: rgba(13, 15, 19, .96); backdrop-filter: blur(12px); border-top: 1px solid var(--border);
+    background: #0d0f13; border-top: 1px solid var(--border);
     padding: 6px 4px max(6px, env(safe-area-inset-bottom));
   }
   .tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; border-radius: 10px; font-size: 10.5px; }
   .tabs button.active { background: none; color: var(--accent); }
   .tabs .ti { display: block; }
-  .view { padding: 16px 16px calc(90px + env(safe-area-inset-bottom)); }
+  .view { padding: 18px 16px calc(96px + env(safe-area-inset-bottom)); }
+  h2 { font-size: 24px; }
+  .page-head { margin-bottom: 16px; }
+  .page-head p { font-size: 14px; }
+  .card { padding: 16px; border-radius: 16px; }
+  .stack { gap: 12px; }
+  .workout-title { margin-top: 4px; }
+  /* Kennzahlen kompakt in einer Zeile */
+  .kpis { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kpi { padding: 12px; }
+  .kpi .v { font-size: 20px; }
+  .kpi .v small { display: block; font-size: 11.5px; margin-top: 2px; }
+  .kpi .label { font-size: 10.5px; }
+  /* Tageszeilen: Status nur als Punkt rechts oben */
+  .day { grid-template-columns: 40px 1fr auto; gap: 12px; align-items: start; }
+  .day > :last-child { grid-column: auto; }
+  .day .status { font-size: 0; gap: 0; margin-top: 6px; }
+  .day .status::before { width: 10px; height: 10px; }
+  .day.rest .day-sub { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .week-head { flex-wrap: nowrap !important; align-items: flex-start !important; }
+  .week-head .week-nav .chip { display: none; }
+  .act { grid-template-columns: 36px 1fr auto; gap: 12px; }
+  .plan-week { grid-template-columns: 38px 1fr auto; gap: 10px; align-items: start; }
+  .plan-week .wk { font-size: 16px; }
+  .sport-ico { width: 36px; height: 36px; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .grid-2, .grid-hero { grid-template-columns: 1fr; }
   .workout-title { font-size: 21px; }
-  .day { grid-template-columns: 48px 1fr; }
-  .day > :last-child { grid-column: 2; }
   .modal { padding: 0; place-items: end stretch; }
   .modal-card { border-radius: 18px 18px 0 0; max-height: 92vh; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
   .modal-bar { margin: 0 -16px 12px; padding: 10px 12px; }

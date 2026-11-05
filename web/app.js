@@ -254,36 +254,58 @@ function renderToday(el) {
   const wk = currentWeek();
   const week = S.plan.weeks.find((w) => w.week === wk);
 
+  const freeDay = `<div class="card">
+      <div class="label">Heute</div>
+      <h3 style="margin-top:6px">${planStart && today < planStart ? "Noch frei, der Plan startet " + fmtDate(planStart) : "Heute frei"}</h3>
+      ${next[0] ? `<div class="row between clickable next-up" data-session="${next[0].id}"><div><div class="day-sub">Als Nächstes · ${fmtDate(next[0].date)}</div><div class="day-title">${SPORT_ICO[next[0].sport]} ${esc(next[0].title)}</div></div><span class="chev">›</span></div>` : ""}
+    </div>`;
+  const nextCard = `<div class="card">
+      <div class="label">Als Nächstes</div>
+      <div class="list" style="margin-top:6px">
+        ${next.map((s) => `<div class="list-row clickable" data-session="${s.id}">
+            <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)} · ${fmtMin(s.duration_min)}</div></div>
+            ${s.key ? `<span class="chip key">★</span>` : `<span class="chev">›</span>`}
+          </div>`).join("") || `<p class="empty">Keine weiteren Einheiten.</p>`}
+      </div>
+    </div>`;
+  const B = {
+    today: main && main.sport !== "rest" ? sessionCard(main, { hero: true }) : freeDay,
+    ready: readinessCard(S.readiness.today),
+    feel: feelPrompt(),
+    watch: watchReminder(),
+    weather: weatherCard(),
+    notes: notes.map(noteCard).join(""),
+    latest: latest ? `<div><div class="section-head"><h3>Letzte Einheit</h3><button class="chip" data-view-link="aktivitaeten">Alle →</button></div>${activityFeedbackCard(latest)}</div>` : "",
+    load: loadCard(S.load && S.load.today),
+    next: main && main.sport !== "rest" ? nextCard : next.length > 1 ? nextCard : "",
+    week: week ? weekStrip(wk) : "",
+  };
+  const pick = (keys) => keys.map((k) => B[k]).filter(Boolean).join("");
+  // Handy: eine Spalte, das Wichtigste zuerst. Desktop: zwei Spalten.
+  const mobile = window.matchMedia("(max-width: 760px)").matches;
+  const body = mobile
+    ? `<div class="stack">${pick(["today", "ready", "feel", "watch", "weather", "notes", "next", "latest", "load", "week"])}</div>`
+    : `<div class="grid grid-hero"><div class="stack">${pick(["today", "feel", "watch", "notes", "latest"])}</div>
+       <div class="stack">${pick(["ready", "weather", "load", "next", "week"])}</div></div>`;
   el.innerHTML = `
     <div class="page-head">
       <h2>Hallo ${esc(S.athlete.name)} 👋</h2>
-      <p>${fmtDateLong(today)} · ${week ? `Woche ${wk} · ${esc(phaseOf(week.phase).name)} · ${esc(week.focus)}` : ""}${planStart && today < planStart ? ` · Plan startet ${fmtDate(planStart)}` : ""}</p>
+      <p>${fmtDateLong(today)}</p>
+      ${week ? `<div class="row wrap" style="gap:6px;margin-top:8px"><span class="chip"><span class="phase-dot" style="background:${phaseOf(week.phase).color}"></span>Woche ${wk} · ${esc(phaseOf(week.phase).name)}</span></div>` : ""}
     </div>
-    <div class="grid grid-hero">
-      <div class="stack">
-        ${main ? sessionCard(main, { hero: true }) : `<div class="card"><h3>Heute nichts geplant</h3><p class="t2" style="margin-top:6px">Der Plan startet am ${fmtDate(planStart)}</p></div>`}
-        ${feelPrompt()}
-        ${watchReminder()}
-        ${notes.map((n) => `<div class="card note-card"><div class="label">Coach · ${fmtDate(n.date)}</div><h3 style="margin-top:6px">${esc(n.title)}</h3><p class="t2" style="margin-top:6px;white-space:pre-line">${esc(n.text)}</p></div>`).join("")}
-        ${latest ? `<div><div class="section-head"><h3>Letzte Einheit</h3><button class="chip" data-view-link="aktivitaeten">Alle ansehen →</button></div>${activityFeedbackCard(latest)}</div>` : ""}
-      </div>
-      <div class="stack">
-        ${readinessCard(S.readiness.today)}
-        ${weatherCard()}
-        ${loadCard(S.load && S.load.today)}
-        <div class="card">
-          <div class="label">Als Nächstes</div>
-          <div class="stack" style="gap:10px;margin-top:10px">
-            ${next.map((s) => `<div class="row between clickable" data-session="${s.id}" style="cursor:pointer">
-                <div><div class="day-title">${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)} · ${fmtMin(s.duration_min)}</div></div>
-                ${s.key ? `<span class="chip key">Schlüssel</span>` : `<span class="chip">${KIND[s.kind] || ""}</span>`}
-              </div>`).join("") || `<p class="empty">Keine weiteren Einheiten.</p>`}
-          </div>
-        </div>
-        ${week ? weekStrip(wk) : ""}
-      </div>
-    </div>`;
+    ${body}`;
   $$("[data-view-link]", el).forEach((b) => b.addEventListener("click", () => setView(b.dataset.viewLink, { drill: true })));
+}
+
+/** Coach-Nachricht: lange Texte eingeklappt mit „Weiterlesen“. */
+function noteCard(n) {
+  const long = (n.text || "").length > 280;
+  return `<div class="card note-card">
+    <div class="label">Coach · ${fmtDate(n.date)}</div>
+    <h3 style="margin-top:6px">${esc(n.title)}</h3>
+    <div class="note-text ${long ? "clamped" : ""}">${esc(n.text)}</div>
+    ${long ? `<button class="link-btn" onclick="this.previousElementSibling.classList.toggle('clamped');this.textContent=this.previousElementSibling.classList.contains('clamped')?'Weiterlesen':'Weniger'">Weiterlesen</button>` : ""}
+  </div>`;
 }
 
 function watchReminder() {
@@ -608,7 +630,7 @@ function renderWeek(el) {
   const phase = phaseOf(w.phase);
   const end = addDays(w.start, w.week === 0 ? all.length - 1 : 6);
   el.innerHTML = `
-    <div class="page-head row between wrap">
+    <div class="page-head row between wrap week-head">
       <div><h2>Woche ${w.week}${w.deload ? " · Entlastung" : ""}</h2>
         <p>${fmtDate(w.start)} – ${fmtDate(end)} · <span class="phase-dot" style="background:${phase.color}"></span> ${esc(phase.name)} · ${esc(w.focus)}</p></div>
       <div class="week-nav">
@@ -644,22 +666,16 @@ function renderPlan(el) {
   const cur = currentWeek();
   const phases = S.plan.phases;
   el.innerHTML = `
-    <div class="page-head"><h2>Dein 12-Wochen-Plan</h2><p>Ziel: ${esc(S.goal)} · Start ${fmtDate(S.plan.start)} · 3 Läufe, 1 Rad, 1 Kraft pro Woche</p></div>
+    <div class="page-head"><h2>Dein Plan</h2><p>${esc(S.goal)} · 12 Wochen ab ${fmtDate(S.plan.start)}</p></div>
     <div class="card">
-      <div class="label">Phasen</div>
-      <div class="phase-bar">${weeks.map((w) => `<span style="flex:1;background:${phaseOf(w.phase).color};opacity:${w.week < cur ? 0.45 : 1}" title="W${w.week}"></span>`).join("")}</div>
-      <div class="grid grid-2" style="margin-top:12px">${phases.filter((p) => p.id !== "intro").map((p) => `<div><div class="row"><span class="phase-dot" style="background:${p.color}"></span><b>${esc(p.name)}</b><span class="muted" style="font-size:13px">W${p.weeks[0]}–${p.weeks[p.weeks.length - 1]}</span></div><p class="t2" style="font-size:13.5px;margin-top:4px">${esc(p.goal)}</p></div>`).join("")}
-        <div><div class="row"><b>Wochenrhythmus</b></div><p class="t2" style="font-size:13.5px;margin-top:4px">Mo Kraft · Di Ruhe · <b style="color:var(--text)">Mi VO2max</b> · Do Rad · <b style="color:var(--text)">Fr Schwelle</b> · Sa Ruhe · <b style="color:var(--text)">So Langer Lauf</b>. Tage tauschen ist okay: zwischen zwei harten Einheiten mindestens 48 h.</p></div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="row between wrap"><h3>Laufumfang pro Woche</h3></div>
-      <div id="volChart" class="chart" style="margin-top:8px"></div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <h3>Deine Zonen</h3>
-      <p class="t2" style="font-size:13.5px;margin-top:4px">Persönlich aus deinen Daten abgeleitet (HFmax ≈ ${S.athlete.hr_max}, Schwelle ≈ ${S.athlete.lthr} bpm). Tipp: Diese Werte auch auf der Uhr als Laufzonen eintragen. Rad-Zonen liegen etwa 10 bpm tiefer.</p>
-      ${zoneLegend("run")}
+      <div class="phase-bar" style="margin-top:0">${weeks.map((w) => `<span style="flex:1;background:${phaseOf(w.phase).color};opacity:${w.week < cur ? 0.45 : 1}" title="W${w.week}"></span>`).join("")}</div>
+      <div class="row wrap" style="gap:6px;margin-top:10px">${phases.filter((p) => p.id !== "intro").map((p) => `<span class="chip"><span class="phase-dot" style="background:${p.color}"></span>${esc(p.name)} · W${p.weeks[0]}–${p.weeks[p.weeks.length - 1]}</span>`).join("")}</div>
+      <details class="more"><summary>Wie der Plan aufgebaut ist</summary>
+        <div class="stack" style="gap:10px;margin-top:10px">${phases.filter((p) => p.id !== "intro").map((p) => `<div><b>${esc(p.name)}</b><p class="t2" style="font-size:13.5px;margin-top:2px">${esc(p.goal)}</p></div>`).join("")}
+          <div><b>Wochenrhythmus</b><p class="t2" style="font-size:13.5px;margin-top:2px">Mo Kraft · Di Ruhe · <b style="color:var(--text)">Mi VO2max</b> · Do Rad · <b style="color:var(--text)">Fr Schwelle</b> · Sa Ruhe · <b style="color:var(--text)">So Langer Lauf</b>. Tage tauschen ist okay, zwischen zwei harten Einheiten mindestens 48 h.</p></div>
+          <div><b>Deine Zonen</b><p class="t2" style="font-size:13.5px;margin-top:2px">Aus deinen Daten abgeleitet (HFmax ≈ ${S.athlete.hr_max}, Schwelle ≈ ${S.athlete.lthr} bpm). Am besten auch auf der Uhr eintragen. Rad etwa 10 bpm tiefer.</p>${zoneLegend("run")}</div>
+        </div>
+      </details>
     </div>
     <div class="stack" style="gap:10px;margin-top:16px">
       ${weeks.map((w) => {
@@ -671,6 +687,10 @@ function renderPlan(el) {
           <div class="t2 num" style="text-align:right;font-size:13px">${w.run_km} km<br><span class="muted">${fmtMin(w.total_min)}</span></div>
         </div>`;
       }).join("")}
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>Laufumfang pro Woche</h3>
+      <div id="volChart" class="chart" style="margin-top:8px"></div>
     </div>`;
   $$("[data-week]", el).forEach((n) => n.addEventListener("click", () => { weekSel = +n.dataset.week; setView("woche", { drill: true }); }));
   barChart($("#volChart", el), weeks.map((w) => ({ label: `W${w.week}`, a: w.run_km, b: w.week <= cur ? w.done_run_km : null })),
@@ -694,8 +714,8 @@ function renderActivities(el) {
   const start = sessions()[0].date;
   const list = S.activities.filter((a) => actFilter === "all" || a.date >= start);
   el.innerHTML = `
-    <div class="page-head row between wrap"><div><h2>Aktivitäten</h2><p>Jede Einheit wird automatisch gegen den Plan geprüft. Dazu kommt Coach-Feedback.</p></div>
-      <div class="filter"><button data-f="plan" class="${actFilter === "plan" ? "active" : ""}">Seit Planstart</button><button data-f="all" class="${actFilter === "all" ? "active" : ""}">Alle (120 Tage)</button></div></div>
+    <div class="page-head row between wrap"><div><h2>Aktivitäten</h2></div>
+      <div class="filter"><button data-f="plan" class="${actFilter === "plan" ? "active" : ""}">Seit Planstart</button><button data-f="all" class="${actFilter === "all" ? "active" : ""}">Alle</button></div></div>
     <div class="stack" style="gap:10px">
       ${list.map((a) => `<div class="card tight act clickable" data-act="${a.id}">
         <div class="sport-ico">${SPORT_ICO[a.analysis.metrics.sport]}</div>
