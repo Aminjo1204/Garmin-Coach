@@ -62,6 +62,7 @@ def status() -> dict:
         "sync": {k: s["sync"].get(k) for k in ("last_sync", "ok", "errors")},
         "readiness": s["readiness"]["today"],
         "readiness_last7": s["readiness"]["series"][-7:],
+        "training_load": s["load"]["today"],
         "vo2max_last": s["vo2"][-5:],
         "current_week": next((w for w in s["plan"]["weeks"] if w["week"] == cur_week), None),
         "upcoming": [{k: x[k] for k in ("id", "date", "weekday", "title", "kind", "key", "duration_min", "status", "adjusted")}

@@ -305,6 +305,50 @@ def analyze(a: dict, fit: dict | None, s: dict | None, plan_first: str = "") -> 
     return {"score": score, "rating": rating, "points": pts, "metrics": m, "kind": kind}
 
 
+
+# ---------- Trainingslast (akut vs. chronisch) ----------
+
+ACWR_LEVELS = [
+    (0.8, "low", "Niedrig", "Weniger als gewohnt. Gut zur Erholung, auf Dauer geht aber Form verloren."),
+    (1.3, "ok", "Optimal", "Belastung im grünen Bereich. So wird man fitter, ohne zu überziehen."),
+    (1.5, "high", "Erhöht", "Belastung steigt schnell. Lockere Einheiten jetzt wirklich locker halten."),
+    (99, "danger", "Zu schnell", "Deutlich mehr als gewohnt: erhöhtes Verletzungsrisiko. Umfang oder Intensität reduzieren."),
+]
+
+
+def activity_load(a: dict, fit: dict | None) -> float:
+    """Edwards-TRIMP: Minuten je Zone × Zonennummer. Ohne Pulsdaten: Minuten × 1,5."""
+    zs = (fit or {}).get("zone_sec") or []
+    if sum(zs) > 0:
+        return sum(sec / 60 * (i + 1) for i, sec in enumerate(zs))
+    return (a.get("duration") or 0) / 60 * 1.5
+
+
+def load_series(acts: list[dict], fits: dict, days: int = 56) -> dict:
+    daily: dict[str, float] = {}
+    for a in acts:
+        d = a["startTimeLocal"][:10]
+        daily[d] = daily.get(d, 0) + activity_load(a, fits.get(a["activityId"]))
+    today = date.today()
+    first = min(daily) if daily else today.isoformat()
+    series = []
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        acute = sum(daily.get((d - timedelta(days=k)).isoformat(), 0) for k in range(7))
+        chronic = sum(daily.get((d - timedelta(days=k)).isoformat(), 0) for k in range(28)) / 4
+        enough = (d - date.fromisoformat(first)).days >= 27  # erst ab 4 Wochen Historie aussagekräftig
+        series.append({"date": d.isoformat(), "load": round(daily.get(d.isoformat(), 0)),
+                       "acute": round(acute), "chronic": round(chronic),
+                       "acwr": round(acute / chronic, 2) if chronic > 0 and enough else None})
+    t = series[-1]
+    level = None
+    if t["acwr"] is not None:
+        for lim, key, name, text in ACWR_LEVELS:
+            if t["acwr"] < lim:
+                level = {"key": key, "name": name, "text": text}
+                break
+    return {"series": series, "today": {**t, "level": level}}
+
 # ---------- Tagesform ----------
 
 def readiness_series(data: dict, days: int = 42) -> list[dict]:
@@ -332,7 +376,7 @@ def readiness_series(data: dict, days: int = 42) -> list[dict]:
     return out
 
 
-def readiness_today(series: list[dict], session: dict | None) -> dict:
+def readiness_today(series: list[dict], session: dict | None, acwr: float | None = None) -> dict:
     t = series[-1] if series else {}
     prev = [x["rhr"] for x in series[-15:-1] if x["rhr"]]
     score = 70
@@ -381,6 +425,12 @@ def readiness_today(series: list[dict], session: dict | None) -> dict:
             factors.append(("ok", f"Body Battery max. {b}"))
         else:
             factors.append(("warn", f"Body Battery max. {b}"))
+
+    if acwr is not None and acwr >= 1.5:
+        score -= 10
+        factors.append(("bad", f"Trainingslast {acwr:.2f}× über deinem Schnitt (Belastungsampel rot)"))
+    elif acwr is not None and acwr >= 1.3:
+        factors.append(("warn", f"Trainingslast {acwr:.2f}× über deinem Schnitt"))
 
     score = max(0, min(100, score))
     level = "green" if score >= 70 else "yellow" if score >= 50 else "red"
@@ -468,6 +518,7 @@ def build_state() -> dict:
         weeks.append(w)
 
     series = readiness_series(data)
+    load = load_series(acts, data["fits"])
     today_session = next((s for s in out_sessions if s["date"] == today and s["sport"] != "rest"), None) or \
         next((s for s in out_sessions if s["date"] == today), None)
 
@@ -491,7 +542,8 @@ def build_state() -> dict:
         "plan": {k: plan.get(k) for k in ("start", "phases", "zones", "paces", "changelog")} |
                 {"weeks": weeks, "sessions": out_sessions},
         "activities": out_acts,
-        "readiness": {"today": readiness_today(series, today_session), "series": series},
+        "readiness": {"today": readiness_today(series, today_session, load["today"]["acwr"]), "series": series},
+        "load": load,
         "vo2": vo2,
         "zone_4w": zone_4w,
         "notes": data["notes"],

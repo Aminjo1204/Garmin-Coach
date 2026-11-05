@@ -111,6 +111,13 @@ p { margin: 0; }
 .advice.yellow { border-left: 3px solid var(--warning); }
 .advice.green { border-left: 3px solid var(--good); }
 
+/* Belastungsampel */
+.gauge { position: relative; display: flex; gap: 2px; height: 10px; margin-top: 12px; }
+.gauge > span { border-radius: 3px; opacity: .85; }
+.gauge-scale { position: relative; height: 16px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.gauge-scale span { position: absolute; transform: translateX(-50%); }
+.gauge > i { position: absolute; top: -5px; width: 4px; height: 20px; margin-left: -2px; background: var(--text); border-radius: 2px; box-shadow: 0 0 0 2px var(--surface); }
+
 /* Workout */
 .workout-title { font-size: 24px; font-weight: 700; letter-spacing: -.015em; margin-top: 6px; }
 .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; color: var(--text-2); font-size: 14px; }

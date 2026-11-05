@@ -176,6 +176,7 @@ function renderToday(el) {
       </div>
       <div class="stack">
         ${readinessCard(S.readiness.today)}
+        ${loadCard(S.load && S.load.today)}
         <div class="card">
           <div class="label">Als Nächstes</div>
           <div class="stack" style="gap:10px;margin-top:10px">
@@ -232,6 +233,28 @@ function readinessCard(r) {
       <ul class="factors">${r.factors.map(([lvl, t]) => `<li><span class="ico ${lvl}">${ICON[lvl]}</span>${esc(t)}</li>`).join("") || `<li>Keine Daten für heute.</li>`}</ul>
     </div>
     <div class="advice ${r.level}">${esc(r.advice)}</div>
+  </div>`;
+}
+
+const LOAD_COL = { low: "var(--z1)", ok: "var(--good)", high: "var(--warning)", danger: "var(--critical)" };
+const LOAD_ICO = { low: "↓", ok: "✓", high: "!", danger: "✕" };
+
+function loadCard(t) {
+  if (!t) return "";
+  if (t.acwr === null || !t.level) {
+    return `<div class="card"><div class="label">Belastungsampel</div><p class="t2" style="margin-top:8px;font-size:13.5px">Braucht mindestens 4 Wochen Trainingsdaten.</p></div>`;
+  }
+  const pos = Math.min(100, (t.acwr / 2) * 100);
+  return `<div class="card">
+    <div class="row between"><div class="label">Belastungsampel</div><span class="status" style="color:${LOAD_COL[t.level.key]}">${LOAD_ICO[t.level.key]} ${esc(t.level.name)}</span></div>
+    <div class="row" style="align-items:baseline;gap:8px;margin-top:8px"><span class="num" style="font-size:28px;font-weight:700">${t.acwr.toFixed(2).replace(".", ",")}</span><span class="t2" style="font-size:13px">× dein 4-Wochen-Schnitt</span></div>
+    <div class="gauge" aria-hidden="true">
+      <span style="flex:0.8;background:var(--z1)"></span><span style="flex:0.5;background:var(--good)"></span><span style="flex:0.2;background:var(--warning)"></span><span style="flex:0.5;background:var(--critical)"></span>
+      <i style="left:${pos}%"></i>
+    </div>
+    <div class="gauge-scale"><span style="left:0;transform:none">0</span><span style="left:40%">0,8</span><span style="left:65%">1,3</span><span style="left:75%">1,5</span><span style="left:100%;transform:translateX(-100%)">2+</span></div>
+    <p class="t2" style="font-size:13.5px;margin-top:8px">${esc(t.level.text)}</p>
+    <p class="muted" style="font-size:12px;margin-top:6px">Last 7 Tage: ${t.acute} · Ø pro Woche (4 Wo.): ${t.chronic}</p>
   </div>`;
 }
 
@@ -684,6 +707,9 @@ function renderProgress(el) {
     </div>
     <div class="card" style="margin-top:16px"><h3>VO2max (Garmin-Schätzung je Lauf)</h3><div id="vo2Chart" class="chart" style="margin-top:8px"></div>
       <p class="muted" style="font-size:12.5px;margin-top:6px">Garmin zeigt den Wert gerundet an (z. B. 46,6 → 47). Er reagiert langsam: Ein Plus von 2–3 Punkten in 12 Wochen ist ein starkes Ergebnis.</p></div>
+    <div class="card" style="margin-top:16px"><h3>Belastungsampel (akut ÷ chronisch)</h3>
+      <p class="t2" style="font-size:13.5px;margin-top:4px">Trainingslast der letzten 7 Tage geteilt durch deinen 4-Wochen-Schnitt. Am besten bleibst du zwischen 0,8 und 1,3. Über 1,5 steigt das Verletzungsrisiko deutlich.</p>
+      <div id="acwrChart" class="chart" style="margin-top:8px"></div></div>
     <div class="card" style="margin-top:16px"><h3>Intensitätsverteilung Laufen (letzte 4 Wochen)</h3>
       <p class="t2" style="font-size:13.5px;margin-top:4px">${Math.round(zt)} min gesamt. Für VO2max-Fortschritt: etwa 75–80 % locker (Z1–2), der Rest gezielt hart (Z4–5). Wenig Z3.</p>
       ${zoneBar(zp)}${zoneLegend("run")}</div>
@@ -699,6 +725,16 @@ function renderProgress(el) {
       yMin: Math.floor(Math.min(...vo2.map((v) => v.value)) - 1), yMax: S.athlete.vo2max_goal + 0.5, yFmt: (v) => v.toFixed(1), height: 220, dots: true,
     });
   } else $("#vo2Chart", el).innerHTML = `<p class="empty">Noch keine Werte.</p>`;
+  const ls = ((S.load && S.load.series) || []).filter((x) => x.acwr !== null);
+  if (ls.length > 1) {
+    lineChart($("#acwrChart", el), {
+      series: [{ name: "Belastung", color: "var(--accent)", points: ls.map((x) => [x.date, x.acwr]) }],
+      band: ls.map((x) => [x.date, 0.8, 1.3]), bandName: "Optimal 0,8–1,3",
+      refLines: [{ y: 1.5, label: "1,5 Risiko" }], yMin: 0, yMax: Math.max(2, ...ls.map((x) => x.acwr)) + 0.1,
+      yFmt: (v) => v.toFixed(2).replace(".", ","), height: 200,
+      tipExtra: (i) => ` · 7 Tage: ${ls[i].acute} · Ø/Woche: ${ls[i].chronic}`,
+    });
+  } else $("#acwrChart", el).innerHTML = `<p class="empty">Braucht mindestens 4 Wochen Trainingsdaten.</p>`;
   lineChart($("#hrvChart", el), {
     series: [{ name: "HRV", color: "var(--z1)", points: ser.filter((x) => x.hrv).map((x) => [x.date, x.hrv]) }],
     band: ser.filter((x) => x.hrv_low).map((x) => [x.date, x.hrv_low, x.hrv_high]), bandName: "Normalbereich",

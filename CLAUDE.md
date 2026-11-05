@@ -64,6 +64,9 @@ Der Garmin-API-Schlüssel liegt in `~/.config/garmin/`. **Niemals lesen, ausgebe
      Schwellen-Einheiten um 5–10 s/km anpassen. Nach einem 5-km-Test `five_k` in `athlete.json` aktualisieren und die
      Paces der restlichen Einheiten neu setzen.
    - Umfang nie um mehr als 10 % pro Woche steigern. Entlastungswochen (4, 8, 12) beibehalten.
+   - Belastungsampel (`training_load.acwr` = 7-Tage-Last / 4-Wochen-Schnitt):
+     - ≥ 1,5: die nächste harte Einheit entschärfen (eine Wiederholung weniger oder locker).
+     - 1,3–1,5: keine Zusatzbelastung.
    - Bei jeder Anpassung:
      - im Session-Objekt `"adjusted": {"reason": "…", "at": "<ISO-Zeit>", "original_title": "…"}` setzen
      - `title`, `steps`, `duration_min` und `distance_km` passend mitändern
