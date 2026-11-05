@@ -115,6 +115,10 @@ Danach öffnet sich http://127.0.0.1:5057. Die App synchronisiert beim Öffnen a
   kann sich aber mit Firmware-Updates ändern.
 - Zonen und Paces sind Schätzungen. Nach jedem 5-km-Test `five_k` aktualisieren.
 
+## Lizenz
+
+[MIT](LICENSE): Du darfst den Code frei nutzen, verändern und weitergeben, solange der Lizenzhinweis erhalten bleibt.
+
 ## Aufbau
 
 ```
