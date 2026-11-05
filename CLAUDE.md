@@ -103,6 +103,13 @@ Kein medizinischer Rat über die Trainingsanpassung hinaus.
 
 Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
 
+### 2026-11-05 – README neu gegliedert
+- Oben eine kurze Erklärung mit kompakter Funktionsliste, danach die Einrichtung in nummerierten Schritten (1–8:
+  Download, Python, API-Schlüssel, Profil, Sync + Plan, Start, Claude-Coach, optional Netlify). Anpassen, Grenzen,
+  Aufbau und Lizenz stehen am Ende.
+- Warum: Wer das Repo öffnet, soll in wenigen Zeilen sehen, was die App kann, und dann ohne Suchen loslegen können.
+- Neue Felder oder Setup-Schritte künftig auch im README nachtragen (Profil-Tabelle, Aufbau-Liste).
+
 ### 2026-11-05 – Zurück-Navigation, Mobile-Aufräumen, Netlify-Feinschliff
 - Detailfenster mit fester Kopfleiste (Zurück/✕), Verlauf über `history.pushState`: `showModal`/`redrawModal`/
   `closeModal` in `web/app.js`. `redrawModal` zeichnet neu ohne Verlaufseintrag (nach dem Speichern, beim
