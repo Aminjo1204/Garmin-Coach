@@ -147,6 +147,7 @@ coach/plan_builder.py   Plan-Vorlagen je Ziel und Bausteine
 coach/sync.py           Garmin Personal API + FIT-Auswertung
 coach/analysis.py       Plan-Abgleich, Auto-Analyse, Tagesform, Prognose
 coach/userdata.py       Eingaben aus der App (Häkchen, Notizen, Verschiebungen)
+coach/store.py          JSON-Dateien sicher schreiben und lesen
 coach/cli.py            Übersicht für den Coach (status / sync / week)
 web/                    Oberfläche (PWA)
 CLAUDE.md               Anweisungen für Claude als Coach

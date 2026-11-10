@@ -24,6 +24,7 @@ Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
 - `coach/setup.py`: Fragebogen-Backend (`/api/setup`): Vorschläge aus Garmin-Daten, Antworten prüfen, `athlete.json`
   schreiben, alten Plan als `plan/plan-<Zeit>.json` sichern, Plan erzeugen, `moves`/`on_watch` zurücksetzen
 - `coach/userdata.py`: Eingaben aus der App (`on_watch`, `notes`, `moves`) in `userdata/userdata.json`
+- `coach/store.py`: `write_json` / `read_text`: JSON sicher schreiben (temporäre Datei, dann umbenennen) und lesen
 - `coach/cli.py`: `status` / `sync` / `week [N]` für den Coach-Check
 - `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons).
   `app.py --home DIR --port N` legt alle persönlichen Daten in DIR ab (Konfiguration `pace-coach-test` → `testhome/`).
@@ -109,6 +110,23 @@ Kein medizinischer Rat über die Trainingsanpassung hinaus.
 ## Journal
 
 Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
+
+### 2026-11-10 – Sync behält die Historie, Dateien werden sicher geschrieben
+- Der Sync hat `activities`, `daily_summaries`, `sleep_summaries` und `hrv` bisher komplett überschrieben (120 bzw.
+  60 Tage). Ältere Werte gingen verloren. Jetzt (`_with_history` in `coach/sync.py`): Das abgerufene Zeitfenster wird
+  ersetzt, alles davor bleibt. So verschwinden in Garmin gelöschte Aktivitäten weiterhin, die Dateien wachsen aber
+  mit der Zeit. `body_battery` wird weiter überschrieben (groß, von der App nicht genutzt).
+- Leere Antwort von Garmin bei vorhandenen Daten: nichts schreiben, Fehler in `sync_info.json`.
+- Neues `coach/store.py`: Schreiben über temporäre Datei + `os.replace`, damit App und Coach-Check nie eine halbe
+  Datei lesen. Genutzt von Sync und `userdata`. `setup.py` und `plan_builder.py` schreiben noch direkt.
+- `userdata.json`: Vor jedem Speichern Kopie als `userdata.json.bak`. Ist die Datei beschädigt, wird die Sicherung
+  geladen und die kaputte Datei als `userdata.json.defekt` abgelegt. Vorher galt sie als leer und der nächste Klick
+  hätte alle Notizen und Verschiebungen überschrieben.
+- **Stolperfalle Windows:** `os.replace` scheitert mit `PermissionError`, solange ein anderer Prozess die Zieldatei
+  liest, und Leser bekommen denselben Fehler während des Ersetzens. Deshalb wiederholen beide Seiten kurz
+  (`write_text` bis 5 s, `read_text` bis 2 s). JSON-Dateien in `data/` und `userdata/` immer über `store` lesen.
+- Die Diagramme zeigen weiterhin nur 42 Tage (Tagesform) bzw. 56 Tage (Belastung). Die längere Historie ist nur
+  gespeichert, noch nicht sichtbar.
 
 ### 2026-11-05 – Fragebogen und Pläne je Ziel, Netlify entfernt
 - Netlify komplett entfernt (Functions, `coach/netlify.py`, Doku, npm-Dateien, Static-Modus im Frontend). Grund: Der

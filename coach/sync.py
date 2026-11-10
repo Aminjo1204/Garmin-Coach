@@ -16,6 +16,7 @@ from garmin_personal_api import (
 )
 
 from .config import DATA_DIR, FIT_DIR, SYNC_INFO_FILE, sport_of, zone_of
+from .store import read_text, write_json
 
 CHUNK_DAYS = 28
 ACTIVITY_LOOKBACK = 120
@@ -57,8 +58,35 @@ def _activities(c: GarminPersonalApiClient, start: date, end: date) -> list:
 
 
 def _save(name: str, payload: Any) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / f"{name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False), encoding="utf-8")
+    write_json(DATA_DIR / f"{name}.json", payload)
+
+
+# Listen mit Verlauf: Der Sync holt nur ein Zeitfenster. Ältere Einträge bleiben erhalten, das Fenster selbst
+# wird ersetzt (so verschwinden auch Aktivitäten, die in Garmin Connect gelöscht wurden).
+HISTORY = {
+    "activities": lambda x: (x.get("startTimeLocal") or "")[:10],
+    "daily_summaries": lambda x: x.get("calendarDate") or "",
+    "sleep_summaries": lambda x: x.get("calendarDate") or "",
+    "hrv": lambda x: x.get("calendarDate") or "",
+}
+
+
+class EmptyResult(Exception):
+    pass
+
+
+def _with_history(name: str, new: list, since: date) -> list:
+    day = HISTORY[name]
+    try:
+        old = json.loads(read_text(DATA_DIR / f"{name}.json"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        old = []
+    if not isinstance(old, list):
+        old = []
+    if old and not new:
+        raise EmptyResult("leere Antwort von Garmin, vorhandene Daten bleiben unverändert")
+    older = [x for x in old if isinstance(x, dict) and day(x) and day(x) < since.isoformat()]
+    return new + older if name == "activities" else older + new  # Aktivitäten: neueste zuerst
 
 
 # ---------- FIT ----------
@@ -156,8 +184,7 @@ def sync(activity_days: int = ACTIVITY_LOOKBACK, health_days: int = HEALTH_LOOKB
             token = auth.obtain_token(resolve_api_key())
     except GarminPersonalApiError as exc:
         info.update(ok=False, errors=[f"Anmeldung fehlgeschlagen: {exc}"])
-        SYNC_INFO_FILE.parent.mkdir(exist_ok=True)
-        SYNC_INFO_FILE.write_text(json.dumps(info, indent=1), encoding="utf-8")
+        write_json(SYNC_INFO_FILE, info)
         return info
 
     jobs: dict[str, Callable[[GarminPersonalApiClient], Any]] = {
@@ -176,11 +203,13 @@ def sync(activity_days: int = ACTIVITY_LOOKBACK, health_days: int = HEALTH_LOOKB
         for name, job in jobs.items():
             try:
                 res = job(c)
-                _save(name, res)
                 if name == "activities":
-                    acts = res
+                    acts = res  # FIT-Dateien nur für das abgerufene Fenster nachladen
+                if name in HISTORY:
+                    res = _with_history(name, res, a_start if name == "activities" else h_start)
+                _save(name, res)
                 log(f"OK    {name:<17} {len(res) if isinstance(res, list) else 1}")
-            except GarminPersonalApiError as exc:
+            except (GarminPersonalApiError, EmptyResult) as exc:
                 info["errors"].append(f"{name}: {str(exc)[:160]}")
                 log(f"FEHLER {name}: {str(exc)[:160]}")
 
@@ -191,12 +220,12 @@ def sync(activity_days: int = ACTIVITY_LOOKBACK, health_days: int = HEALTH_LOOKB
                 continue
             try:
                 parsed = _fit_for(c, a)
-                f.write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
+                write_json(f, parsed, indent=None)
                 info["new_fit"].append(a["activityId"])
                 log(f"FIT   {a['startTimeLocal'][:10]} {a.get('activityName')}")
             except Exception as exc:  # FIT-Fehler sollen den Sync nicht abbrechen
                 info["errors"].append(f"FIT {a['activityId']}: {str(exc)[:160]}")
 
     info["ok"] = not info["errors"]
-    SYNC_INFO_FILE.write_text(json.dumps(info, indent=1), encoding="utf-8")
+    write_json(SYNC_INFO_FILE, info)
     return info

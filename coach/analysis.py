@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from . import userdata
+from .store import read_text
 from .config import (ATHLETE, DATA_DIR, EASY_CAP_BIKE, EASY_CAP_RUN, FEEDBACK_DIR, FIT_DIR, NOTES_FILE, PLAN_FILE,
                      PLAN_START, SYNC_INFO_FILE, THR_HI, THR_LO, VO2_HR, sport_of)
 
@@ -19,7 +20,7 @@ HFMAX_VO2 = VO2_HR  # Untergrenze VO2max-Bereich (Zone 5)
 
 def _load(path: Path, default: Any = None) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_text(path))
     except (FileNotFoundError, json.JSONDecodeError):
         return default
 

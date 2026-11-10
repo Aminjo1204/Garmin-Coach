@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from . import userdata
 from .config import ATHLETE_FILE, DATA_DIR, FIT_DIR, GOALS, NOTES_FILE, PLAN_FILE, ROOT, sport_of
 from .plan_builder import MAX_WEEKS, MIN_WEEKS
+from .store import read_text
 
 
 class SetupError(ValueError):
@@ -25,7 +26,7 @@ class SetupError(ValueError):
 
 def _load(path, default=None):
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_text(path))
     except (FileNotFoundError, json.JSONDecodeError):
         return default
 

@@ -6,9 +6,11 @@ Format: {kind: {key: {"value": ..., "at": ISO-Zeit}}}. value = None bedeutet „
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime, timezone
 
 from .config import USERDATA_FILE
+from .store import read_text, write_json
 
 KINDS = ("on_watch", "notes", "moves")
 
@@ -17,17 +19,40 @@ def empty() -> dict:
     return {k: {} for k in KINDS}
 
 
-def load() -> dict:
+def _backup_file():
+    return USERDATA_FILE.with_name(USERDATA_FILE.name + ".bak")
+
+
+def _read(path) -> dict | None:
+    """Inhalt der Datei. None, wenn sie fehlt, leer oder beschädigt ist."""
     try:
-        d = json.loads(USERDATA_FILE.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        d = {}
+        d = json.loads(read_text(path))
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def load() -> dict:
+    d = _read(USERDATA_FILE)
+    if d is None and USERDATA_FILE.exists():
+        # Beschädigt: nicht als „leer“ behandeln (der nächste Klick würde sonst alles überschreiben),
+        # sondern den letzten guten Stand nehmen und die kaputte Datei zur Seite legen.
+        d = _read(_backup_file())
+        try:
+            shutil.copyfile(USERDATA_FILE, USERDATA_FILE.with_name(USERDATA_FILE.name + ".defekt"))
+        except OSError:
+            pass
+    d = d or {}
     return {k: d.get(k, {}) for k in KINDS}
 
 
 def save(d: dict) -> None:
-    USERDATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    USERDATA_FILE.write_text(json.dumps(d, indent=1, ensure_ascii=False), encoding="utf-8")
+    if _read(USERDATA_FILE) is not None:  # nur einen lesbaren Stand als Sicherung behalten
+        try:
+            shutil.copyfile(USERDATA_FILE, _backup_file())
+        except OSError:
+            pass
+    write_json(USERDATA_FILE, d)
 
 
 def now_iso() -> str:
