@@ -548,6 +548,10 @@ function garminSheet(s, open) {
     <p class="t2" style="font-size:13px;margin-top:8px">Garmin Connect App → <b>Training &amp; Planung → Workouts → Workout erstellen → Laufen</b>. Schritte in dieser Reihenfolge anlegen, speichern, dann <b>An Gerät senden</b>.</p>
     <div class="row wrap" style="margin-top:10px;gap:8px"><span class="t2" style="font-size:13px">Name:</span><code class="wname">${esc(name)}</code><button class="chip" data-copy="${esc(name)}">Kopieren</button></div>
     <ol class="sheet">${items}</ol>
+    <div class="sheet-file">
+      <a class="chip" href="/api/workout/${encodeURIComponent(s.id)}.fit?name=${encodeURIComponent(name)}" download>⬇ Workout-Datei (.fit)</a>
+      <p class="t2">Ohne Abtippen: Uhr per USB anschließen, die Datei in den Ordner <b>GARMIN → NewFiles</b> kopieren, Uhr trennen. Das Workout steht dann unter Training → Workouts.</p>
+    </div>
     ${watchToggle(s)}
   </details>`;
 }
@@ -920,7 +924,9 @@ window.addEventListener("popstate", (e) => {
     return;
   }
   const st = e.state || {};
-  view = st.view || "heute";
+  const fromHash = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : null;
+  if (!e.state && fromHash) history.replaceState({ view: fromHash, week: null, depth: 0 }, "", "#" + fromHash);
+  view = st.view || fromHash || "heute";
   if (st.week !== undefined && st.week !== null) weekSel = st.week;
   try { localStorage.setItem("view", view); } catch (_) {}
   window.scrollTo(0, 0);
@@ -939,7 +945,7 @@ function renderProgress(el) {
   const easy = zp[0] + zp[1];
   el.innerHTML = `
     <div class="page-head"><h2>Fortschritt</h2><p>Ziel: ${esc(S.goal || "")}</p></div>
-    <div class="kpis">
+    <div class="kpis four">
       <div class="card tight kpi"><div class="label">VO2max aktuell</div><div class="v num">${lastVo2 ?? "–"} ${vo2Goal ? `<small>Ziel ${vo2Goal}</small>` : ""}</div></div>
       <div class="card tight kpi"><div class="label">Locker-Anteil (4 Wo.)</div><div class="v num">${easy} % <small>Ziel ≥ 75 %</small></div></div>
       <div class="card tight kpi"><div class="label">HRV 7-Tage-Ø</div><div class="v num">${lastVal(ser, "hrv_week") ?? "–"} <small>ms</small></div></div>

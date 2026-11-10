@@ -25,7 +25,9 @@ Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
   schreiben, alten Plan als `plan/plan-<Zeit>.json` sichern, Plan erzeugen, `moves`/`on_watch` zurücksetzen
 - `coach/userdata.py`: Eingaben aus der App (`on_watch`, `notes`, `moves`) in `userdata/userdata.json`
 - `coach/store.py`: `write_json` / `read_text`: JSON sicher schreiben (temporäre Datei, dann umbenennen) und lesen
+- `coach/workout_fit.py`: geplante Einheit als Garmin-Workout (FIT), Download über `/api/workout/<id>.fit`
 - `coach/cli.py`: `status` / `sync` / `week [N]` für den Coach-Check
+- `tests/`: `python -m unittest` (läuft in einem Wegwerf-Ordner über `COACH_HOME`, nie auf den echten Daten)
 - `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons).
   `app.py --home DIR --port N` legt alle persönlichen Daten in DIR ab (Konfiguration `pace-coach-test` → `testhome/`).
 - `feedback/<activityId>.json`: Coach-Feedback (von Claude geschrieben), `feedback/notes.json`: Coach-Nachrichten
@@ -110,6 +112,24 @@ Kein medizinischer Rat über die Trainingsanpassung hinaus.
 ## Journal
 
 Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
+
+### 2026-11-10 – Workout-Datei, 5-km-Erkennung, Tests, Kleinigkeiten
+- **Workout als FIT-Datei** (`coach/workout_fit.py`, Knopf im Spickzettel): Encoder aus `garmin-fit-sdk`. Aufbau wie
+  der Spickzettel (Pulsziel außer in Pausen, Pace nur als Notiz). Mit dem Decoder zurückgelesen, **auf einer Uhr
+  noch nicht ausprobiert**. Übertragung per USB in `GARMIN/NewFiles`.
+  - Stolperfallen FIT: Der Encoder kennt nur die Hauptfelder, also Rohwerte schreiben (`duration_value` in ms bzw.
+    cm). Absoluter Puls = Schläge + 100 (Werte bis 100 gelten als % HFmax). Wiederholung = eigener Schritt
+    `repeat_until_steps_cmplt`, `duration_value` = Position des ersten Schritts im Block, `target_value` = Anzahl.
+    Pausen bekommen `intensity: rest`, weil die Analyse Runden mit `rest`/`recovery` als Pause liest.
+- **5-km-Test:** Gibt es keine einzelne Runde von 4,8–5,3 km (z. B. Auto-Lap je km), zählen die schnellsten 5 km am
+  Stück. `parse_fit` rechnet sie genau aus den Sekundenwerten (`best_5k_sec`), für ältere FIT-Auswertungen schätzt
+  `_best_5k` aus der 10-s-Kurve (Distanzfehler an echten Läufen 0–1 %). Gerechnet wird mit verstrichener Zeit:
+  Pausen zählen mit, auch bei Auto-Pause.
+- **Tests** (`tests/`, 48 Stück, nur Standardbibliothek): Abgleich, Analyse, Tagesform, Belastung, Prognose,
+  Speichern, Sync-Historie, Workout-Datei.
+- **Kleinigkeiten:** Paces ab 10:00/km wurden falsch gelesen (`\d` statt `\d+`). Tagesform ohne HRV- und
+  Schlafdaten ist höchstens gelb, mit Hinweis. Kennzahlen in „Fortschritt“ mobil 2 × 2 (`.kpis.four`). Eine von Hand
+  geänderte Adresse (`#woche`) wechselt die Ansicht. `VERSION` in `web/sw.js` auf v3.
 
 ### 2026-11-10 – Sync behält die Historie, Dateien werden sicher geschrieben
 - Der Sync hat `activities`, `daily_summaries`, `sleep_summaries` und `hrv` bisher komplett überschrieben (120 bzw.
@@ -204,6 +224,8 @@ Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (
   sind harmlos.
 
 ### Offene Ideen
-- Unit-Tests für `analysis.py` (Abgleich, Intervall-Erkennung, Prognose) fehlen.
-- FIT-Workout-Export zum Kopieren per USB (`garmin-fit-sdk` hat einen Encoder). Bisher nicht gewünscht.
+- Tests für die Intervall-Erkennung (VO2max, Schwelle) und für `setup.py` fehlen noch.
+- Workout-Datei auf der Uhr ausprobieren. Danach evtl. alle Workouts einer Woche als ZIP.
+- Zwei Läufe am selben Tag werden derselben geplanten Einheit zugeordnet (`match_sessions`).
+- Handy-Zugriff: Die App läuft nur auf `127.0.0.1`. Idee: Tailscale.
 - Service-Worker-Version (`VERSION` in `web/sw.js`) bei größeren Änderungen hochzählen.

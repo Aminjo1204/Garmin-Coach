@@ -15,6 +15,7 @@ from garmin_personal_api import (
     resolve_api_key,
 )
 
+from .analysis import best_segment
 from .config import DATA_DIR, FIT_DIR, SYNC_INFO_FILE, sport_of, zone_of
 from .store import read_text, write_json
 
@@ -119,11 +120,14 @@ def parse_fit(raw: bytes, sport: str) -> dict:
 
     zone_sec = [0, 0, 0, 0, 0]
     series = []
+    track = []  # (Sekunden seit Start, Distanz in m) für die schnellsten 5 km
     prev = None
     for r in msgs.get("record_mesgs") or []:
         ts, hr = r.get("timestamp"), r.get("heart_rate")
         if ts is None:
             continue
+        if start_ts and r.get("distance") is not None:
+            track.append(((ts - start_ts).total_seconds(), r["distance"]))
         if prev is not None and hr:
             dt = (ts - prev).total_seconds()
             if 0 < dt <= 10:
@@ -147,7 +151,9 @@ def parse_fit(raw: bytes, sport: str) -> dict:
 
     wk = (msgs.get("workout_mesgs") or [{}])[0]
     rpe = sess.get("workout_rpe")
+    best_5k = best_segment(track, 5000) if sport == "run" else None
     return {
+        "best_5k_sec": round(best_5k) if best_5k else None,
         "laps": laps,
         "zone_sec": [round(x) for x in zone_sec],
         "series": series,

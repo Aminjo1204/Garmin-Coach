@@ -1,5 +1,5 @@
 /* Service Worker: App-Shell offline verfügbar, Daten "network first" mit Cache-Fallback. */
-const VERSION = "pace-coach-v2";
+const VERSION = "pace-coach-v3";
 const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/manifest.webmanifest",
   "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
 

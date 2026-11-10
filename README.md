@@ -22,7 +22,7 @@ etwas verpasst hast oder es zwickt. Alles läuft auf deinem eigenen Rechner.
   Reiz gesetzt wurde.
 - **Coach-Feedback von Claude** zu jeder Einheit, Wochen-Rückblick und Planänderungen nach festen Regeln.
 - **Dein Feedback:** Gefühl, Beine, Schmerzen und Notiz nach jeder Einheit. Der Coach geht darauf ein.
-- **Praktisches:** Spickzettel zum Eintippen der Workouts auf die Uhr, Einheiten verschieben mit Regelprüfung,
+- **Praktisches:** Workouts als Datei für die Uhr (oder Spickzettel zum Eintippen), Einheiten verschieben mit Regelprüfung,
   Belastungsampel gegen zu schnelles Steigern, Wettkampf-Prognose (5 km bis Halbmarathon) und Wetter-Hinweise.
 - **Fortschritt:** VO2max-Verlauf, Intensitätsverteilung, HRV, Ruhepuls und Schlaf.
 
@@ -125,12 +125,14 @@ Profil, Plan und Eingaben landen dann in `testhome/` statt im Projektordner.
   `bike(60)` oder `strength("A")`.
 - **Fragebogen:** Prüfung und Schätzungen in `coach/setup.py`, Oberfläche in `web/app.js` (`renderSetup`).
 - **Analyse-Regeln:** `coach/analysis.py`
+- **Tests:** `python -m unittest` im Projektordner. Sie laufen in einem leeren Wegwerf-Ordner, nie auf deinen Daten.
 - **Oberfläche:** `web/` (reines HTML, CSS und JS, kein Build-Schritt)
 
 ## Grenzen
 
-- Die Personal API kann **nur lesen**. Workouts kommen nicht automatisch auf die Uhr. Leg Intervalle als Workout in
-  Garmin Connect an (der Spickzettel in der App hilft), dann erkennt die Analyse jede Wiederholung.
+- Die Personal API kann **nur lesen**. Workouts kommen nicht automatisch auf die Uhr. Zwei Wege: im Detailfenster
+  der Einheit die **Workout-Datei (.fit)** laden und per USB in den Ordner `GARMIN/NewFiles` der Uhr kopieren, oder das
+  Workout mit dem Spickzettel in Garmin Connect eintippen. Mit Workout erkennt die Analyse jede Wiederholung.
 - Der VO2max je Lauf stammt aus einem nicht dokumentierten Feld der FIT-Datei. Er stimmt mit Garmins Anzeige überein,
   kann sich aber mit Firmware-Updates ändern.
 - Zonen und Paces sind Schätzungen. Nach jedem 5-km-Test `five_k` aktualisieren.
@@ -148,8 +150,10 @@ coach/sync.py           Garmin Personal API + FIT-Auswertung
 coach/analysis.py       Plan-Abgleich, Auto-Analyse, Tagesform, Prognose
 coach/userdata.py       Eingaben aus der App (Häkchen, Notizen, Verschiebungen)
 coach/store.py          JSON-Dateien sicher schreiben und lesen
+coach/workout_fit.py    Geplante Einheit als Garmin-Workout (FIT-Datei)
 coach/cli.py            Übersicht für den Coach (status / sync / week)
 web/                    Oberfläche (PWA)
+tests/                  Tests (unittest)
 CLAUDE.md               Anweisungen für Claude als Coach
 ```
 

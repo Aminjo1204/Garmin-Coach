@@ -35,7 +35,7 @@ def fmt_pace(sec: float | None) -> str | None:
 def _pace_range(p: str | None) -> tuple[int, int] | None:
     if not p:
         return None
-    vals = [int(m) * 60 + int(s) for m, s in re.findall(r"(\d):(\d\d)", p)]
+    vals = [int(m) * 60 + int(s) for m, s in re.findall(r"(\d+):(\d\d)", p)]
     if not vals:
         return None
     return min(vals), max(vals)
@@ -48,6 +48,37 @@ def _flat(steps):
                 yield from _flat(s["steps"])
         else:
             yield s
+
+
+def best_segment(points: list[tuple[float, float]], dist_m: float) -> float | None:
+    """Schnellster Abschnitt über dist_m. points = (Sekunden seit Start, Distanz in m), aufsteigend.
+
+    Gerechnet wird mit der verstrichenen Zeit (Pausen zählen mit), auf genau dist_m umgerechnet.
+    """
+    best, i = None, 0
+    for j in range(len(points)):
+        while i + 1 < j and points[j][1] - points[i + 1][1] >= dist_m:
+            i += 1
+        d = points[j][1] - points[i][1]
+        if d >= dist_m:
+            t = (points[j][0] - points[i][0]) * dist_m / d
+            if t > 0 and (best is None or t < best):
+                best = t
+    return best
+
+
+def _best_5k(fit: dict | None) -> tuple[float | None, bool]:
+    """(Sekunden, geschätzt?). Genau aus der FIT-Auswertung, sonst aus der Geschwindigkeitskurve (10-s-Raster)."""
+    fit = fit or {}
+    if fit.get("best_5k_sec"):
+        return fit["best_5k_sec"], False
+    pts, dist, prev_t = [], 0.0, None
+    for t, _hr, spd in fit.get("series") or []:
+        if prev_t is not None and spd and t - prev_t <= 30:
+            dist += spd * (t - prev_t)
+        pts.append((t, dist))
+        prev_t = t
+    return best_segment(pts, 5000), True
 
 
 # ---------- Laden ----------
@@ -287,7 +318,13 @@ def analyze(a: dict, fit: dict | None, s: dict | None, plan_first: str = "") -> 
             m["test_5k"] = f"{int(t // 60)}:{int(t % 60):02d}"
             add("ok", f"5-km-Zeit: {m['test_5k']} (Ø {fmt_pace(l['pace_s'])}/km, Ø-Puls {l['avg_hr']}).")
         else:
-            add("info", "Testabschnitt nicht als eigene Runde erkannt. Drück beim nächsten Test zu Beginn und am Ende die Runden-Taste.")
+            t, approx = _best_5k(fit)
+            if t:
+                m["test_5k"] = f"{int(t // 60)}:{int(t % 60):02d}"
+                add("ok", f"5-km-Zeit: {'ca. ' if approx else ''}{m['test_5k']} (schnellste 5 km am Stück in diesem Lauf, "
+                          f"Ø {fmt_pace(t / 5)}/km{', aus der Geschwindigkeitskurve geschätzt' if approx else ''}).")
+            else:
+                add("info", "Keine 5 km am Stück in diesem Lauf gefunden, deshalb keine Testzeit.")
 
     if kind == "race":
         planned = next((x for x in _flat(s["steps"]) if x["type"] == "work"), None)
@@ -518,6 +555,10 @@ def readiness_today(series: list[dict], session: dict | None, acwr: float | None
         factors.append(("warn", f"Trainingslast {acwr:.2f}× über deinem Schnitt"))
 
     score = max(0, min(100, score))
+    if factors and not t.get("hrv") and not t.get("sleep_score"):
+        # Uhr nachts nicht getragen: ohne HRV und Schlaf kein „grün“
+        score = min(score, 69)
+        factors.append(("warn", "Keine HRV- und Schlafdaten von letzter Nacht, die Einschätzung ist unsicher"))
     level = "green" if score >= 70 else "yellow" if score >= 50 else "red"
     key = bool(session and session.get("key"))
     hard = bool(session and session.get("sport") in ("run", "bike", "strength"))

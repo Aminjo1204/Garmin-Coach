@@ -20,11 +20,11 @@ if __name__ == "__main__":
         os.makedirs(ARGS.home, exist_ok=True)
         os.environ["COACH_HOME"] = os.path.abspath(ARGS.home)
 
-from flask import Flask, jsonify, request, send_from_directory  # noqa: E402
+from flask import Flask, Response, jsonify, request, send_from_directory  # noqa: E402
 
 import coach.config  # noqa: E402
 import coach.plan_builder  # noqa: E402
-from coach import analysis, setup, userdata  # noqa: E402
+from coach import analysis, setup, userdata, workout_fit  # noqa: E402
 from coach import sync as sync_mod  # noqa: E402
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -65,6 +65,19 @@ def do_sync():
 def detail(aid: int):
     d = analysis.activity_detail(aid)
     return (jsonify(d), 200) if d else (jsonify({"error": "keine FIT-Daten"}), 404)
+
+
+@app.get("/api/workout/<sid>.fit")
+def workout_file(sid: str):
+    """Geplante Einheit als Garmin-Workout zum Kopieren auf die Uhr (USB, Ordner GARMIN/NewFiles)."""
+    data = analysis.load_all()
+    sessions = analysis.apply_moves(data["plan"].get("sessions", []), userdata.values(data["user"], "moves"))
+    s = next((x for x in sessions if x["id"] == sid), None)
+    if not s or not workout_fit.exportable(s):
+        return jsonify({"error": "Für diese Einheit gibt es kein Workout."}), 404
+    name = (request.args.get("name") or "").strip()[:40] or workout_fit.default_name(s)
+    return Response(workout_fit.build(s, name), mimetype="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{workout_fit.file_name(name)}"'})
 
 
 @app.get("/api/userdata")

@@ -144,6 +144,9 @@ details.more summary { cursor: pointer; color: var(--text-2); font-size: 13.5px;
 .sheet-box summary { font-weight: 600; color: var(--text); }
 .watch-ok { color: var(--good); font-weight: 600; margin-left: 6px; font-size: 13px; }
 code.wname { background: var(--surface-2); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px; font-size: 13px; }
+.sheet-file { margin-top: 12px; display: grid; gap: 6px; justify-items: start; }
+.sheet-file a.chip { text-decoration: none; color: var(--text); font-weight: 600; }
+.sheet-file p { font-size: 13px; margin: 0; }
 ol.sheet { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
 ol.sheet ol.sheet { margin-top: 8px; }
 ol.sheet > li { display: grid; grid-template-columns: 34px 1fr; gap: 8px; background: var(--surface-2); border-radius: 10px; padding: 9px 10px; font-size: 14px; }
@@ -346,6 +349,7 @@ table.laps td { padding: 6px; border-bottom: 1px solid var(--border); font-varia
   .workout-title { margin-top: 4px; }
   /* Kennzahlen kompakt in einer Zeile */
   .kpis { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kpis.four { grid-template-columns: repeat(2, 1fr); }
   .kpi { padding: 12px; }
   .kpi .v { font-size: 20px; }
   .kpi .v small { display: block; font-size: 11.5px; margin-top: 2px; }
