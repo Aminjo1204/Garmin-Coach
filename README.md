@@ -107,6 +107,11 @@ Feedback schreiben, den Plan bei Bedarf anpassen und montags eine Wochen-Nachric
 - **Automatisch:** in der Claude-Desktop-App eine geplante Aufgabe anlegen, z. B. morgens und abends. Die Vorlage
   steht in [`docs/coach-check-prompt.md`](docs/coach-check-prompt.md).
 
+### Am Handy nutzen
+
+Die App läuft nur auf deinem PC. Mit Tailscale gibst du sie für deine eigenen Geräte frei (verschlüsselt, nicht
+öffentlich) und legst sie am Handy auf den Homescreen. Schritt für Schritt: [`docs/handy.md`](docs/handy.md).
+
 ### Ausprobieren ohne eigene Daten zu ändern
 
 ```bash

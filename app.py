@@ -9,7 +9,12 @@ import argparse
 import importlib
 import mimetypes
 import os
+import sys
 import threading
+
+if sys.stdout is None or sys.stderr is None:
+    # Start ohne Fenster (pythonw.exe): Es gibt keine Konsole, Ausgaben würden sonst zu Fehlern führen.
+    sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 if __name__ == "__main__":
     _ap = argparse.ArgumentParser()
