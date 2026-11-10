@@ -30,6 +30,8 @@ Sprache: Deutsch, per du, direkt, konkret, motivierend, ohne Floskeln.
 - `tests/`: `python -m unittest` (läuft in einem Wegwerf-Ordner über `COACH_HOME`, nie auf den echten Daten)
 - `app.py` + `web/`: lokale Web-App (Flask) auf http://127.0.0.1:5057, PWA (Manifest, Service Worker, Icons).
   `app.py --home DIR --port N` legt alle persönlichen Daten in DIR ab (Konfiguration `pace-coach-test` → `testhome/`).
+- `Pace Coach Hintergrund.bat` (App ohne Fenster, für den Autostart) und `Pace Coach Handy.bat` (Freigabe über
+  Tailscale), Anleitung in `docs/handy.md`
 - `feedback/<activityId>.json`: Coach-Feedback (von Claude geschrieben), `feedback/notes.json`: Coach-Nachrichten
 - Nicht im Repo: `athlete.json`, `data/`, `feedback/`, `plan/`, `userdata/`, `testhome/`, `CLAUDE.local.md`
 
@@ -112,6 +114,35 @@ Kein medizinischer Rat über die Trainingsanpassung hinaus.
 ## Journal
 
 Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (was, warum, Stolperfallen).
+
+### 2026-11-10 – Handy-Zugriff über Tailscale vorbereitet
+- Weg: `tailscale serve --bg http://127.0.0.1:5057`. Tailscale stellt die App per HTTPS nur im eigenen Tailnet
+  bereit, die App bleibt an `127.0.0.1` gebunden. Kein Login in der App nötig, keine Kosten, kein Deploy.
+  HTTPS ist Pflicht, sonst registriert iOS den Service Worker nicht.
+- Neu: `Pace Coach Handy.bat` (Freigabe einrichten, zeigt die Adresse), `Pace Coach Hintergrund.bat` (Start mit
+  `pythonw.exe` ohne Fenster), `docs/handy.md` (Schritte für PC, iPhone, Tailscale-Konto, Autostart).
+- `app.py`: Unter `pythonw.exe` sind `sys.stdout`/`sys.stderr` `None`. Sie werden auf `os.devnull` umgeleitet.
+  Start ohne Fenster im Testordner geprüft.
+- **Nicht geprüft:** Tailscale selbst war beim Schreiben nicht installiert, `Pace Coach Handy.bat` ist also
+  ungetestet. Installation, Anmeldung und „Enable HTTPS“ macht der Athlet selbst.
+- **Stolperfallen:** PC im Ruhezustand = App nicht erreichbar. „Enable HTTPS“ veröffentlicht den Gerätenamen im
+  Zertifikatsverzeichnis. Läuft die App schon im Hintergrund, scheitert ein zweiter Start am belegten Port.
+
+### 2026-11-10 – Heute und Woche neu gestaltet
+- Vorher als Entwurfsbild abgestimmt. Farben und Stil bleiben, weniger Text, mehr auf einen Blick.
+- **Heute:** Wochenleiste (`dayStrip`, ein Kreis pro Tag), eine große Karte für die heutige bzw. nächste Einheit
+  (`heroCard`, mit Profil und Knopf „Auf die Uhr“), Tagesform und Belastung als zwei Kacheln (`statusTiles`,
+  Antippen klappt die bisherigen Karten auf, `tileOpen`), Coach-Nachricht als Sprechblase mit zwei Zeilen.
+  Ist die Tagesform nicht grün, steht der Rat immer sichtbar unter den Kacheln.
+- **Woche:** Fortschrittsbalken statt drei Kennzahlen, Tage als Zeitleiste (`.tl-row`), Schlüsseleinheit und
+  heutiger Tag als Karte, Ruhetage zurückgenommen.
+- Emoji durch Linien-Symbole ersetzt (`I` und `SPORT_ICO` in `web/app.js`, Klasse `.si`). Die Symbole sind HTML,
+  also nie in `title`-Attribute oder `textContent` schreiben.
+- `data-sheet="<id>"` öffnet die Einheit mit aufgeklapptem Spickzettel (in `bind`, mit `stopPropagation`).
+  **Stolperfalle:** kein `data-session` auf Elementen innerhalb einer Karte mit `data-session`, sonst öffnet sich
+  das Detailfenster doppelt.
+- Die alten `.day`-Regeln in `style.css` und die Karte „Woche“ auf der Heute-Seite sind entfallen bzw. ungenutzt.
+  `VERSION` in `web/sw.js` auf v4.
 
 ### 2026-11-10 – Workout-Datei, 5-km-Erkennung, Tests, Kleinigkeiten
 - **Workout als FIT-Datei** (`coach/workout_fit.py`, Knopf im Spickzettel): Encoder aus `garmin-fit-sdk`. Aufbau wie
@@ -227,5 +258,4 @@ Neueste Einträge oben. Format: `### JJJJ-MM-TT – Thema`, danach Stichpunkte (
 - Tests für die Intervall-Erkennung (VO2max, Schwelle) und für `setup.py` fehlen noch.
 - Workout-Datei auf der Uhr ausprobieren. Danach evtl. alle Workouts einer Woche als ZIP.
 - Zwei Läufe am selben Tag werden derselben geplanten Einheit zugeordnet (`match_sessions`).
-- Handy-Zugriff: Die App läuft nur auf `127.0.0.1`. Idee: Tailscale.
 - Service-Worker-Version (`VERSION` in `web/sw.js`) bei größeren Änderungen hochzählen.
