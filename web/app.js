@@ -20,7 +20,19 @@ const KIND = {
   vo2: "VO2max", short: "VO2max kurz", threshold: "Schwelle", tempo: "Tempo", progression: "Progression", hills: "Berg",
   easy: "Locker", long: "Lang", test: "Test", race: "Wettkampf", bike_z2: "Rad", strength: "Kraft", rest: "Ruhe", extra: "Zusatz", pre: "Vor Plan",
 };
-const SPORT_ICO = { run: "🏃", bike: "🚴", strength: "🏋️", rest: "😴", other: "•" };
+const svgI = (d) => `<svg class="si" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const I = {
+  run: svgI('<circle cx="15.5" cy="4.5" r="1.8"/><path d="M5.5 21l3.8-4.6 2.2-3.9"/><path d="M11.5 12.5l3.2 2.7-.7 5.3"/><path d="M11.5 12.5l1-4.6-3.6.9-1.9 3"/><path d="M12.5 7.9l2.6 2.8 3.4.3"/>'),
+  bike: svgI('<circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17v-3.5l-3-3 4-3 2 3h2.5"/>'),
+  strength: svgI('<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>'),
+  rest: svgI('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+  check: svgI('<path d="M20 6L9 17l-5-5"/>'),
+  x: svgI('<path d="M6 6l12 12M18 6L6 18"/>'),
+  bolt: svgI('<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>'),
+  watch: svgI('<circle cx="12" cy="12" r="6"/><path d="M12 9.5V12l1.5 1.5M9 6.8l.6-3.3a1 1 0 0 1 1-.8h2.8a1 1 0 0 1 1 .8l.6 3.3M9 17.2l.6 3.3a1 1 0 0 0 1 .8h2.8a1 1 0 0 0 1-.8l.6-3.3"/>'),
+  msg: svgI('<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+};
+const SPORT_ICO = { run: I.run, bike: I.bike, strength: I.strength, rest: I.rest, other: "•" };
 const STATUS_TXT = { done: "Erledigt", missed: "Verpasst", today: "Heute", planned: "Geplant", rest: "Ruhe" };
 const ICON = { ok: "✓", warn: "!", bad: "✕", info: "i" };
 
@@ -224,6 +236,7 @@ function render() {
 function bindCommon(root) {
   $$("[data-act]", root).forEach((n) => n.addEventListener("click", (e) => { e.stopPropagation(); openActivity(+n.dataset.act); }));
   $$("[data-session]", root).forEach((n) => n.addEventListener("click", () => openSession(n.dataset.session)));
+  $$("[data-sheet]", root).forEach((n) => n.addEventListener("click", (e) => { e.stopPropagation(); openSession(n.dataset.sheet, true); }));
   $$("[data-watch]", root).forEach((n) => n.addEventListener("click", (e) => {
     e.stopPropagation();
     const id = n.dataset.watch;
@@ -244,96 +257,146 @@ function bindCommon(root) {
 }
 
 // ----- Heute -----
+let tileOpen = null; // aufgeklappte Kachel: "ready" | "load" | null
+
 function renderToday(el) {
   const today = S.today;
   const todays = sessions().filter((s) => s.date === today);
   const main = todays.find((s) => s.sport !== "rest") || todays[0];
-  const next = sessions().filter((s) => s.date > today && s.sport !== "rest").slice(0, 3);
+  const upcoming = sessions().filter((s) => s.date > today && s.sport !== "rest");
+  const hasToday = main && main.sport !== "rest";
+  const hero = hasToday ? main : upcoming[0];
+  const next = upcoming.filter((s) => !hero || s.id !== hero.id).slice(0, 3);
   const latest = S.activities.find((a) => a.feedback) || S.activities[0];
   const notes = (S.notes || []).slice(0, 2);
-  const planStart = sessions()[0] && sessions()[0].date;
   const wk = currentWeek();
   const week = S.plan.weeks.find((w) => w.week === wk);
 
-  const freeDay = `<div class="card">
-      <div class="label">Heute</div>
-      <h3 style="margin-top:6px">${planStart && today < planStart ? "Noch frei, der Plan startet " + fmtDate(planStart) : "Heute frei"}</h3>
-      ${next[0] ? `<div class="row between clickable next-up" data-session="${next[0].id}"><div><div class="day-sub">Als Nächstes · ${fmtDate(next[0].date)}</div><div class="day-title">${SPORT_ICO[next[0].sport]} ${esc(next[0].title)}</div></div><span class="chev">›</span></div>` : ""}
-    </div>`;
-  const nextCard = `<div class="card">
-      <div class="label">Als Nächstes</div>
+  const nextCard = next.length ? `<div class="card">
+      <div class="label">Danach</div>
       <div class="list" style="margin-top:6px">
         ${next.map((s) => `<div class="list-row clickable" data-session="${s.id}">
             <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)} · ${fmtMin(s.duration_min)}</div></div>
-            ${s.key ? `<span class="chip key">★</span>` : `<span class="chev">›</span>`}
-          </div>`).join("") || `<p class="empty">Keine weiteren Einheiten.</p>`}
+            ${s.key ? `<span class="key-mark" title="Schlüsseleinheit">${I.bolt}</span>` : `<span class="chev">›</span>`}
+          </div>`).join("")}
       </div>
-    </div>`;
+    </div>` : "";
   const B = {
-    today: main && main.sport !== "rest" ? sessionCard(main, { hero: true }) : freeDay,
-    ready: readinessCard(S.readiness.today),
+    today: hero ? heroCard(hero, hasToday) : `<div class="card"><div class="label">Heute</div><h3 style="margin-top:6px">Heute frei</h3><p class="t2" style="margin-top:6px">Keine weiteren Einheiten im Plan.</p></div>`,
+    tiles: statusTiles(),
     feel: feelPrompt(),
-    watch: watchReminder(),
+    watch: watchReminder(hero && hero.id),
     weather: weatherCard(),
     notes: notes.map(noteCard).join(""),
     latest: latest ? `<div><div class="section-head"><h3>Letzte Einheit</h3><button class="chip" data-view-link="aktivitaeten">Alle →</button></div>${activityFeedbackCard(latest)}</div>` : "",
-    load: loadCard(S.load && S.load.today),
-    next: main && main.sport !== "rest" ? nextCard : next.length > 1 ? nextCard : "",
-    week: week ? weekStrip(wk) : "",
+    next: nextCard,
   };
   const pick = (keys) => keys.map((k) => B[k]).filter(Boolean).join("");
   // Handy: eine Spalte, das Wichtigste zuerst. Desktop: zwei Spalten.
   const mobile = window.matchMedia("(max-width: 760px)").matches;
   const body = mobile
-    ? `<div class="stack">${pick(["today", "ready", "feel", "watch", "weather", "notes", "next", "latest", "load", "week"])}</div>`
+    ? `<div class="stack">${pick(["today", "tiles", "feel", "watch", "weather", "notes", "next", "latest"])}</div>`
     : `<div class="grid grid-hero"><div class="stack">${pick(["today", "feel", "watch", "notes", "latest"])}</div>
-       <div class="stack">${pick(["ready", "weather", "load", "next", "week"])}</div></div>`;
+       <div class="stack">${pick(["tiles", "weather", "next"])}</div></div>`;
   el.innerHTML = `
-    <div class="page-head">
-      <h2>Hallo ${esc(S.athlete.name)} 👋</h2>
-      <p>${fmtDateLong(today)}</p>
-      ${week ? `<div class="row wrap" style="gap:6px;margin-top:8px"><span class="chip"><span class="phase-dot" style="background:${phaseOf(week.phase).color}"></span>Woche ${wk} · ${esc(phaseOf(week.phase).name)}</span></div>` : ""}
+    <div class="page-head today-head">
+      <div><p class="page-date">${fmtDateLong(today)}</p><h2>Hallo ${esc(S.athlete.name)}</h2></div>
+      ${week ? `<span class="chip"><span class="phase-dot" style="background:${phaseOf(week.phase).color}"></span>Woche ${wk} · ${esc(phaseOf(week.phase).name)}</span>` : ""}
     </div>
+    ${week ? dayStrip(wk) : ""}
     ${body}`;
   $$("[data-view-link]", el).forEach((b) => b.addEventListener("click", () => setView(b.dataset.viewLink, { drill: true })));
+  $$("[data-tile]", el).forEach((b) => b.addEventListener("click", () => { tileOpen = tileOpen === b.dataset.tile ? null : b.dataset.tile; render(); }));
 }
 
-/** Coach-Nachricht: lange Texte eingeklappt mit „Weiterlesen“. */
-function noteCard(n) {
-  const long = (n.text || "").length > 280;
-  return `<div class="card note-card">
-    <div class="label">Coach · ${fmtDate(n.date)}</div>
-    <h3 style="margin-top:6px">${esc(n.title)}</h3>
-    <div class="note-text ${long ? "clamped" : ""}">${esc(n.text)}</div>
-    ${long ? `<button class="link-btn" onclick="this.previousElementSibling.classList.toggle('clamped');this.textContent=this.previousElementSibling.classList.contains('clamped')?'Weiterlesen':'Weniger'">Weiterlesen</button>` : ""}
-  </div>`;
-}
-
-function watchReminder() {
-  const until = addDays(S.today, 4);
-  const todo = sessions().filter((s) => s.date >= S.today && s.date <= until && needsWatch(s) && !uval("on_watch", s.id));
-  if (!todo.length) return "";
-  return `<div class="card" style="border-color:rgba(250,178,25,.35)">
-    <div class="label" style="color:var(--warning)">⌚ Noch auf die Uhr bringen</div>
-    <div class="stack" style="gap:8px;margin-top:10px">${todo.map((s) => `<div class="row between clickable" data-session="${s.id}" style="cursor:pointer">
-      <div><div class="day-title">${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)} · Name: ${esc(workoutName(s))}</div></div><span class="chip">Spickzettel →</span></div>`).join("")}</div>
-  </div>`;
-}
-
-function weekStrip(wk) {
+/** Wochenleiste: ein Kreis pro Tag (erledigt, heute, Schlüsseleinheit, Ruhe). */
+function dayStrip(wk) {
   const all = sessions().filter((s) => s.week === wk);
-  const ss = all.filter((s) => s.sport !== "rest" || !all.some((x) => x.date === s.date && x.sport !== "rest"));
-  const w = S.plan.weeks.find((x) => x.week === wk);
-  const pct = w.sessions_due ? Math.round((100 * w.sessions_done) / w.sessions_due) : 0;
-  return `<div class="card">
-    <div class="row between"><div class="label">Woche ${wk}</div><span class="t2 num" style="font-size:13px">${w.done_run_km} / ${w.run_km} km</span></div>
-    <div class="row" style="gap:6px;margin-top:12px">
-      ${ss.map((s) => `<div title="${esc(fmtDate(s.date) + ": " + s.title)}" data-session="${s.id}" style="flex:1;cursor:pointer;text-align:center">
-        <div style="font-size:11px;color:var(--muted)">${s.weekday}</div>
-        <div style="height:6px;border-radius:3px;margin-top:4px;background:${s.status === "done" ? "var(--good)" : s.status === "missed" ? "var(--critical)" : s.status === "today" ? "var(--accent)" : s.sport === "rest" ? "var(--surface-2)" : "var(--border)"}"></div>
-        <div style="font-size:15px;margin-top:4px">${SPORT_ICO[s.sport]}</div></div>`).join("")}
+  const days = [...new Set(all.map((s) => s.date))].sort().map((d) => {
+    const ss = all.filter((s) => s.date === d);
+    return ss.find((s) => s.sport !== "rest") || ss[0];
+  });
+  return `<div class="daystrip">${days.map((s) => {
+    const isToday = s.date === S.today, rest = s.sport === "rest";
+    const state = s.status === "done" ? "done" : s.status === "missed" ? "missed" : rest ? "rest" : s.key ? "key" : "";
+    const inner = s.status === "done" ? I.check : s.status === "missed" ? I.x : rest ? (isToday ? toDate(s.date).getDate() : "–") : s.key ? I.bolt : SPORT_ICO[s.sport];
+    return `<button class="ds ${state} ${isToday ? "today" : ""}" data-session="${s.id}" aria-label="${esc(fmtDate(s.date) + ": " + s.title + (STATUS_TXT[s.status] ? ", " + STATUS_TXT[s.status] : ""))}">
+      <span>${s.weekday}</span><b>${inner}</b></button>`;
+  }).join("")}</div>`;
+}
+
+/** Große Karte für die heutige bzw. nächste Einheit. Antippen öffnet die Details. */
+function heroCard(s, isToday) {
+  const acts = (s.activity_ids || []).map(actById).filter(Boolean);
+  const planStart = sessions()[0] && sessions()[0].date;
+  const when = s.date === addDays(S.today, 1) ? "morgen" : fmtDate(s.date);
+  const label = isToday ? "Heute" : planStart && S.today < planStart ? `Der Plan startet · ${when}` : `Heute frei · ${when}`;
+  const meta = [fmtMin(s.duration_min), s.distance_km ? `~${String(s.distance_km).replace(".", ",")} km` : "", s.steps && s.steps[0] && s.steps[0].hr ? mainTarget(s) : ""].filter(Boolean);
+  const watch = needsWatch(s) && s.status !== "done";
+  return `<div class="card hero clickable ${s.key ? "key" : ""}" data-session="${s.id}">
+    <div class="row between"><span class="label">${esc(label)}</span>${s.key ? `<span class="key-mark">${I.bolt} Schlüsseleinheit</span>` : ""}</div>
+    <div class="workout-title">${esc(s.title)}</div>
+    ${s.adjusted ? `<div class="advice yellow"><b>Angepasst:</b> ${esc(s.adjusted.reason || "")}</div>` : ""}
+    ${s.moved_from ? `<p class="t2" style="font-size:13px;margin-top:4px">Verschoben von ${esc(WD[toDate(s.moved_from).getDay()])}</p>` : ""}
+    ${profileSvg(s.steps)}
+    <div class="hero-meta num">${meta.map(esc).join(" · ")}</div>
+    ${acts.length ? `<div style="margin-top:12px" class="stack">${acts.map((a) => activityMini(a)).join("")}</div>` : ""}
+    <div class="hero-actions">
+      ${watch ? (uval("on_watch", s.id) ? `<span class="hero-ok">${I.check} Auf der Uhr</span>` : `<button class="hbtn primary" data-sheet="${s.id}">${I.watch} Auf die Uhr</button>`) : ""}
+      <span class="hbtn">Details</span>
+      ${isToday ? tomorrowButton(s) : ""}
     </div>
-    <div class="row between" style="margin-top:10px;font-size:13px"><span class="t2">${w.sessions_done} von ${w.sessions_due} fälligen Einheiten</span><span class="t2">${pct} %</span></div>
+  </div>`;
+}
+
+/** Tagesform und Belastung als zwei Kacheln. Antippen klappt die Einzelwerte auf. */
+function statusTiles() {
+  const r = S.readiness.today, t = S.load && S.load.today;
+  if (!r) return "";
+  const has = r.factors.length > 0;
+  const col = { green: "var(--good)", yellow: "var(--warning)", red: "var(--critical)" }[r.level];
+  const lbl = has ? { green: "Bereit", yellow: "Mittel", red: "Erholen" }[r.level] : "Keine Daten";
+  const C = 2 * Math.PI * 19;
+  const lv = t && t.acwr !== null && t.level;
+  const seg = (key, flex) => `<span style="flex:${flex};background:${lv && lv.key === key ? LOAD_COL[key] : "var(--surface-2)"}"></span>`;
+  const detail = tileOpen === "ready" ? readinessCard(r) : tileOpen === "load" ? loadCard(t)
+    : has && r.level !== "green" ? `<div class="advice ${r.level}" style="margin-top:0">${esc(r.advice)}</div>` : "";
+  return `<div class="stack" style="gap:10px"><div class="tiles">
+    <button class="card tile ${tileOpen === "ready" ? "open" : ""}" data-tile="ready" aria-expanded="${tileOpen === "ready"}">
+      <span class="tile-ring"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="var(--surface-2)" stroke-width="5"/>
+        ${has ? `<circle cx="23" cy="23" r="19" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(C * r.score) / 100} ${C}"/>` : ""}</svg><b class="num">${has ? r.score : "–"}</b></span>
+      <span><span class="label">Tagesform</span><span class="tile-v" style="color:${has ? col : "var(--text-2)"}">${lbl}</span></span>
+    </button>
+    <button class="card tile col ${tileOpen === "load" ? "open" : ""}" data-tile="load" aria-expanded="${tileOpen === "load"}">
+      <span class="label">Belastung</span>
+      <span class="tile-v num">${lv ? `${t.acwr.toFixed(2).replace(".", ",")} <small style="color:${LOAD_COL[lv.key]}">${esc(lv.name)}</small>` : `– <small>ab 4 Wochen Daten</small>`}</span>
+      <span class="tile-gauge">${seg("low", 8)}${seg("ok", 5)}${seg("high", 2)}${seg("danger", 5)}</span>
+    </button>
+  </div>${detail}</div>`;
+}
+
+/** Coach-Nachricht als Sprechblase: zwei Zeilen, der Rest hinter „Weiterlesen“. */
+function noteCard(n) {
+  const long = (n.text || "").length > 120;
+  return `<div class="card note-card">
+    <div class="note-av">${I.msg}</div>
+    <div><div class="label">Coach · ${fmtDate(n.date)}</div>
+      <h3 style="margin-top:2px">${esc(n.title)}</h3>
+      <div class="note-text ${long ? "clamped" : ""}">${esc(n.text)}</div>
+      ${long ? `<button class="link-btn" onclick="this.previousElementSibling.classList.toggle('clamped');this.textContent=this.previousElementSibling.classList.contains('clamped')?'Weiterlesen':'Weniger'">Weiterlesen</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/** Weitere Workouts der nächsten Tage, die noch nicht auf der Uhr sind (die große Karte hat ihren eigenen Knopf). */
+function watchReminder(skipId) {
+  const until = addDays(S.today, 4);
+  const todo = sessions().filter((s) => s.id !== skipId && s.date >= S.today && s.date <= until && needsWatch(s) && !uval("on_watch", s.id));
+  if (!todo.length) return "";
+  return `<div class="card">
+    <div class="label" style="color:var(--warning)">${I.watch} Auch noch auf die Uhr</div>
+    <div class="stack" style="gap:8px;margin-top:10px">${todo.map((s) => `<div class="row between clickable" data-sheet="${s.id}" style="cursor:pointer">
+      <div><div class="day-title">${esc(s.title)}</div><div class="day-sub">${fmtDate(s.date)}</div></div><span class="chev">›</span></div>`).join("")}</div>
   </div>`;
 }
 
@@ -644,20 +707,30 @@ function renderWeek(el) {
         <button class="icon-btn" id="wNext" ${w.week >= weeks[weeks.length - 1].week ? "disabled" : ""} aria-label="Nächste Woche">›</button>
       </div>
     </div>
-    <div class="kpis" style="margin-bottom:16px">
-      <div class="card tight kpi"><div class="label">Laufen</div><div class="v num">${w.done_run_km} <small>/ ${w.run_km} km</small></div></div>
-      <div class="card tight kpi"><div class="label">Trainingszeit</div><div class="v num">${fmtMin(w.done_min)} <small>/ ${fmtMin(w.total_min)}</small></div></div>
-      <div class="card tight kpi"><div class="label">Erledigt</div><div class="v num">${w.sessions_done} <small>/ ${w.sessions_due} fällig</small></div></div>
+    <div class="card wk-prog">
+      <div class="row between"><span class="t2">Laufen</span><span class="num">${String(w.done_run_km).replace(".", ",")} / ${String(w.run_km).replace(".", ",")} km</span></div>
+      <div class="pbar"><i style="width:${w.run_km ? Math.min(100, (100 * w.done_run_km) / w.run_km) : 0}%"></i></div>
+      <div class="row between" style="margin-top:12px"><span class="t2">Trainingszeit</span><span class="num">${fmtMin(w.done_min)} / ${fmtMin(w.total_min)}</span></div>
+      <div class="pbar"><i style="width:${w.total_min ? Math.min(100, (100 * w.done_min) / w.total_min) : 0}%"></i></div>
+      <p class="muted" style="font-size:12.5px;margin-top:10px">${w.sessions_due ? `${w.sessions_done} von ${w.sessions_due} fälligen Einheiten erledigt` : "Noch keine Einheit fällig"}</p>
     </div>
-    <div class="stack" style="gap:10px">
-      ${ss.map((s) => `<div class="card tight day clickable ${s.date === S.today ? "is-today" : ""} ${s.sport === "rest" ? "rest" : ""}" data-session="${s.id}">
-        <div class="dow">${s.weekday}<small>${fmtDM(s.date)}</small></div>
-        <div><div class="day-title">${SPORT_ICO[s.sport]} ${esc(s.title)} ${s.key ? `<span class="chip key" style="margin-left:4px">★</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:4px">angepasst</span>` : ""}${s.moved_from ? `<span class="chip adj" style="margin-left:4px">verschoben</span>` : ""}${needsWatch(s) && s.status !== "done" && s.status !== "missed" ? (uval("on_watch", s.id) ? `<span class="chip watch-chip on" style="margin-left:4px" title="Auf der Uhr">⌚ ✓</span>` : `<span class="chip watch-chip" style="margin-left:4px" title="Noch nicht auf der Uhr">⌚ fehlt</span>`) : ""}</div>
-          <div class="day-sub">${s.sport === "rest" ? esc(s.tips[0] || "") : `${fmtMin(s.duration_min)}${s.distance_km ? ` · ~${s.distance_km} km` : ""} · ${esc(mainTarget(s) || KIND[s.kind])}`}</div>
-          ${(s.activity_ids || []).map((id) => { const a = actById(id); return a ? `<div class="day-sub" style="margin-top:4px;color:var(--text)" data-act="${a.id}">↳ ${esc(a.name)} · ${actStats(a).replace(/<[^>]+>/g, " ")} <span class="rating ${a.analysis.rating}" style="margin-left:6px">${a.analysis.rating}</span></div>` : ""; }).join("")}
+    <div class="tl">
+      ${ss.map((s) => {
+        const isToday = s.date === S.today, rest = s.sport === "rest";
+        const boxed = !rest && (s.key || isToday);
+        const sub = rest ? esc(s.tips[0] || "") : `${fmtMin(s.duration_min)}${s.distance_km ? ` · ~${String(s.distance_km).replace(".", ",")} km` : ""} · ${esc(mainTarget(s) || KIND[s.kind])}`;
+        const watch = needsWatch(s) && s.status !== "done" && s.status !== "missed"
+          ? (uval("on_watch", s.id) ? `<div class="tl-watch on">${I.check} Auf der Uhr</div>` : `<div class="tl-watch">${I.watch} Noch nicht auf der Uhr</div>`) : "";
+        return `<div class="tl-row clickable ${s.status} ${isToday ? "is-today" : ""} ${rest ? "rest" : ""} ${s.key ? "key" : ""}" data-session="${s.id}">
+        <div class="tl-day">${s.weekday}<small>${fmtDM(s.date)}</small></div>
+        <div class="tl-rail"><i></i></div>
+        <div class="tl-body ${boxed ? "boxed" : ""}">
+          <div class="day-title">${rest ? "" : SPORT_ICO[s.sport] + " "}${esc(s.title)}${s.key ? ` <span class="key-mark" title="Schlüsseleinheit">${I.bolt}</span>` : ""}${s.adjusted ? `<span class="chip adj" style="margin-left:6px">angepasst</span>` : ""}${s.moved_from ? `<span class="chip adj" style="margin-left:6px">verschoben</span>` : ""}${s.status === "missed" ? `<span class="tl-missed">Verpasst</span>` : ""}</div>
+          <div class="day-sub">${sub}</div>
+          ${watch}
+          ${(s.activity_ids || []).map((id) => { const a = actById(id); return a ? `<div class="tl-act" data-act="${a.id}">${esc(a.name)} · ${actStats(a).replace(/<[^>]+>/g, " ")} <span class="rating ${a.analysis.rating}">${a.analysis.rating}</span></div>` : ""; }).join("")}
         </div>
-        <span class="status ${s.status}">${STATUS_TXT[s.status]}</span>
-      </div>`).join("")}
+      </div>`; }).join("")}
     </div>`;
   const goWeek = (n) => { weekSel = n; history.replaceState({ ...(history.state || {}), week: n }, ""); render(); };
   $("#wPrev", el).onclick = () => goWeek(weekSel - 1);
